@@ -1,5 +1,9 @@
 # Physical implementation and design feasibility
 
+## Start here: current investigation packet
+
+Read the [starting guide](docs/START-HERE.md) for the current diagram, source evidence, parallel investigations and first useful outputs.
+
 Connect logical hardware design to the realities of implementing a chip. The team investigates how technology, constraints and implementation choices affect feasibility, performance, power, area and confidence in the physical realization of the accelerator.
 
 ## Read the charter

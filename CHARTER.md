@@ -37,7 +37,7 @@ Members may study timing methodology, compare synthesis outcomes, examine storag
 | Partners | Shared concerns |
 |---|---|
 | RTL teams and soc | Exchange design intent, clock/reset assumptions and implementation feedback to connect measured issues to useful design choices. |
-| architecture and ml-models | Relate physical costs and constraints to architectural estimates and workload needs without implying that an isolated metric determines the whole design. |
+| architecture and software | Relate physical costs and constraints to architectural estimates and workload needs without implying that an isolated metric determines the whole design. |
 | verification and accelerator | Clarify the scope of implementation evidence and how it fits with functional and system-level claims. |
 
 ## Possible directions
