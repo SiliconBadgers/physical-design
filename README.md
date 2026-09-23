@@ -1,48 +1,37 @@
-# Physical implementation and design feasibility
+# Synthesis and Physical Design
 
-Connect logical hardware design to the realities of implementing a chip. The team investigates how technology, constraints and implementation choices affect feasibility, performance, power, area and confidence in the physical realization of the accelerator.
+The immediate delivery is one reproducible Synopsys synthesis baseline for the chip and every unit, with explicit stubs where RTL is missing.
 
-## Read the charter
+## Start here
 
-- [CHARTER.md](CHARTER.md): purpose, responsibilities, boundaries, member autonomy and collaboration.
-- [OBJECTIVES.md](OBJECTIVES.md): high-level outcomes that members can choose how to advance.
-- [SETUP.md](SETUP.md): optional technical setup and the scope of any existing example.
+1. Read [the current assignment and artifact locations](docs/START-HERE.md).
+2. Complete [AI setup and the capture check](docs/git-ai.md) before AI edits or
+   your first commit. Every clone needs its local hook activated.
+3. Work on a branch and open a PR for `@abhinavnandwani` using
+   [CONTRIBUTING.md](CONTRIBUTING.md). Main requires a code-owner approval;
+   admins can bypass.
 
-## Choosing a contribution
+## Current issues
 
-Members choose their work in conversation with the charter and their interests.
-A contribution can be a research question, a design study, an experiment, an
-implementation, a useful explanation or teaching material. Leads help connect
-people, questions and evidence. Shared interfaces and commitments are discussed
-with the teams that depend on them.
-
-The scaffold supplies places for that work. It does not specify a backlog,
-required first project, milestone sequence or personal assignment.
+- [Chip-level synthesis with unit stubs](https://github.com/SiliconBadgers/physical-design/issues/2)
+- [Every-unit synthesis targets and reports](https://github.com/SiliconBadgers/physical-design/issues/3)
 
 ## Repository structure
 
 | Location | Purpose |
 |---|---|
-| [docs/](docs/README.md) | Design explanations, proposals, reviews, decisions and learning material. Let the content evolve with the team’s questions; link research and experiment evidence where useful. |
-| [research/](research/README.md) | Literature notes, surveys, analytical studies and comparisons relevant to the charter. Explain the question, sources, interpretation and remaining uncertainty in a form that suits the work. |
-| [experiments/](experiments/README.md) | Exploratory studies, prototypes and experiment narratives. Make the question and interpretation understandable; preserve the context needed to revisit a result. These artifacts need not be production implementations. |
-| [flows/](flows/README.md) | Implementation methods and scripts developed for the questions the team chooses to investigate. |
-| [constraints/](constraints/README.md) | Clock, IO and technology assumptions used in implementation studies. |
-| [reports/](reports/README.md) | Curated results and their interpretation; large raw tool outputs belong in build. |
+| [flows/synopsys/](flows/synopsys/README.md) | Team-owned chip/unit synthesis scripts, unit manifest and source selection for issues #2 and #3. Record tool versions and a single baseline library/corner; no licensed files in Git. |
+| [rtl/stubs/](rtl/stubs/README.md) | Clearly labeled temporary synthesizable stubs, separated from real component RTL. Their ports are proposals; coordinate them with RTL owners. |
+| [rtl/wrappers/](rtl/wrappers/README.md) | Chip assembly and unit wrappers that consume revision-pinned component sources. Do not copy authoritative component implementations here. |
+| [constraints/](constraints/README.md) | Chip and per-unit baseline clocks, I/O assumptions and justified exceptions. Identify unresolved constraints instead of quietly treating them as met. |
+| [reports/](reports/README.md) | Compact curated run summaries and links to evidence, including real/stub/black-box status and unavailable measurements. Generated tool databases/netlists live outside Git unless explicitly reviewed. |
 
-The team may extend this structure as useful. Existing example entry points stay
-in their current locations, described in [SETUP.md](SETUP.md).
+## Current material and scope
 
-## Current material
+No Synopsys synthesis run is supplied or claimed by this refresh. The chip flow, all-unit runner and reports remain the two team assignments.
 
-The charter, documentation and directory scaffold are present. No component implementation or runnable component test is supplied yet. The team chooses what work to undertake.
+[Shared diagram](https://github.com/SiliconBadgers/architecture/blob/main/docs/accelerator-diagram.md) · [Software evidence](https://github.com/SiliconBadgers/software/tree/main/experiments/llama-cpp/2026-09-22)
 
-Existing code is optional material for learning or experimentation. Its behavior
-and tests describe that example and do not select the team’s future design.
-Reading or contributing to the charter, research and design documentation needs
-no tool installation.
-
-This is the [SiliconBadgers/physical-design](https://github.com/SiliconBadgers/physical-design) team repository.
-The [organization guide](https://github.com/SiliconBadgers/accelerator/blob/main/docs/TEAM_GUIDE.md)
-and [repository map](https://github.com/SiliconBadgers/accelerator/blob/main/docs/REPOSITORIES.md)
-explain how the teams connect.
+[CHARTER.md](CHARTER.md) and [OBJECTIVES.md](OBJECTIVES.md) describe the
+longer-term purpose. Current issues and the starting guide specify the work
+assigned now. [SETUP.md](SETUP.md) describes existing example commands and scope.

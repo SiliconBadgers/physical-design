@@ -1,5 +1,9 @@
 # Physical implementation and design feasibility: team charter
 
+Current assignments are listed in [docs/START-HERE.md](docs/START-HERE.md) and
+the linked issues. The broader directions below provide context; they do not
+replace those deliverables.
+
 ## Purpose
 
 Connect logical hardware design to the realities of implementing a chip. The team investigates how technology, constraints and implementation choices affect feasibility, performance, power, area and confidence in the physical realization of the accelerator.
@@ -37,7 +41,7 @@ Members may study timing methodology, compare synthesis outcomes, examine storag
 | Partners | Shared concerns |
 |---|---|
 | RTL teams and soc | Exchange design intent, clock/reset assumptions and implementation feedback to connect measured issues to useful design choices. |
-| architecture and ml-models | Relate physical costs and constraints to architectural estimates and workload needs without implying that an isolated metric determines the whole design. |
+| architecture and software | Relate physical costs and constraints to architectural estimates and workload needs without implying that an isolated metric determines the whole design. |
 | verification and accelerator | Clarify the scope of implementation evidence and how it fits with functional and system-level claims. |
 
 ## Possible directions
