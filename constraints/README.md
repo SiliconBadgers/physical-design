@@ -1,9 +1,5 @@
-# physical-design/constraints
+# constraints
 
-Clock, IO and technology assumptions used in implementation studies.
+Chip and per-unit baseline clocks, I/O assumptions and justified exceptions. Identify unresolved constraints instead of quietly treating them as met.
 
-This directory currently contains this structure note. Members can add material when their chosen work needs it.
-
-This is a suggested home for work supporting the [charter](../CHARTER.md) and
-[objectives](../OBJECTIVES.md). The team can reorganize or extend it as its work
-develops. A directory’s presence does not assign a task or require an artifact.
+See [the current assignment](../docs/START-HERE.md).
