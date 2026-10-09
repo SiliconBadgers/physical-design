@@ -1,0 +1,13 @@
+# File:        power.upf
+# Author:      Isaac Hagedorn
+# Date:        2026-10-09
+# Description: Power intent for every design in this flow: one power domain fed by the supply ports VDD and VSS.
+
+create_power_domain TOP -include_scope
+create_supply_port VDD
+create_supply_port VSS
+create_supply_net  VDD
+create_supply_net  VSS
+connect_supply_net VDD -ports VDD
+connect_supply_net VSS -ports VSS
+set_domain_supply_net TOP -primary_power_net VDD -primary_ground_net VSS
