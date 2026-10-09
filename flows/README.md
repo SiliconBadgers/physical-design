@@ -42,3 +42,5 @@ Each stage writes a metrics file with the same key names in every track (for exa
 | `designs/<name>/tb/` | its simulation test |
 
 Each track adds its own config and constraint file next to them.
+
+`tile` (the systolic MAC array) places four `sb_sram_256x8` blocks as hard macros. Each track builds `sb_sram_256x8` through the same stages first, then turns it into an abstract (LEF, timing model, GDS, netlist).
