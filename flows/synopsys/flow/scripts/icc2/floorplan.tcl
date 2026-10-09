@@ -1,14 +1,14 @@
 # File:        floorplan.tcl
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: Floorplan: design library from the netlist, corners, core size, tap cells, power grid and pins. Writes the icc2/floorplan checkpoint and floorplan.json.
+# Description: Floorplan: design library from the netlist, corners, core size, macro placement, tap cells, power grid and pins. Writes the icc2/floorplan checkpoint and floorplan.json.
 source $::env(SCRIPTS)/icc2/common.tcl
 
 # --- design library and netlist ---
 set lib [stage_lib floorplan]
 file delete -force [file dirname $lib]
 file mkdir [file dirname $lib]
-create_lib $lib -technology $::env(TECH_FILE) -ref_libs $::env(CELL_NDM)
+create_lib $lib -technology $::env(TECH_FILE) -ref_libs [concat $::env(CELL_NDM) [env_or MACRO_NDMS ""]]
 read_verilog -top $TOP $::env(NETLIST)
 link_block
 tech_rules
@@ -19,6 +19,9 @@ setup_scenarios
 # core from the target utilization; the die adds CORE_MARGIN on each side
 initialize_floorplan -shape R -core_utilization [expr {$::env(CORE_UTILIZATION) / 100.0}] \
     -side_ratio [list 1 $::env(ASPECT_RATIO)] -core_offset $::env(CORE_MARGIN)
+
+# hard macros (MACROS in design.mk): placed and fixed before the tap cells and the power grid
+if {[env_or MACRO_NDMS ""] ne ""} { source -echo $::env(SCRIPTS)/icc2/macro_place.tcl }
 
 # tap cells tie the wells to VDD and VSS, every 14 um along each row
 create_tap_cells -lib_cell [get_lib_cells */$::env(TAP_CELL)] -distance 14 -pattern stagger -skip_fixed_cells

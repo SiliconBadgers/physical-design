@@ -44,6 +44,10 @@ MAX_ROUTING_LAYER     := met5
 # clock nets route on these layers
 MIN_CLK_ROUTING_LAYER := met3
 MAX_CLK_ROUTING_LAYER := met4
+# hard macros route up to this layer; their power pins are straps on it, under the met5 straps of the design that uses them
+MACRO_TOP_LAYER := met4
+# macro placement grid (um): the row height, a multiple of the met1-met4 track pitches
+MACRO_GRID      := 4.14
 # supply nets and voltage for IR analysis
 PWR_NET := VDD
 GND_NET := VSS

@@ -1,6 +1,6 @@
 # File:        finish.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-08
+# Date:        2026-10-09
 # Description: Fill cells and final outputs, then parasitic extraction, sign-off timing and IR drop. Writes final.odb, .def, .v, .cdl and .spef.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_load route.odb
@@ -15,7 +15,7 @@ global_connect
 write_db $::env(OUT_DIR)/final.odb
 write_def $::env(OUT_DIR)/final.def
 write_verilog $::env(OUT_DIR)/final.v
-write_cdl -masters $::env(CDL_FILE) $::env(OUT_DIR)/final.cdl   ;# netlist for LVS
+write_cdl -masters [concat $::env(CDL_FILE) [env_or MACRO_CDL ""]] $::env(OUT_DIR)/final.cdl   ;# netlist for LVS
 
 # extracted wire RC replaces the estimates
 define_process_corner -ext_model_index 0 X

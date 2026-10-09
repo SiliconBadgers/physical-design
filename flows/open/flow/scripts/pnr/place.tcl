@@ -1,6 +1,6 @@
 # File:        place.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-08
+# Date:        2026-10-09
 # Description: Placement: global placement, pin placement, electrical repair and legalization. Writes place.odb.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_load floorplan.odb
@@ -11,6 +11,10 @@ set density $::env(PLACE_DENSITY)
 global_placement -skip_io -density $density
 if {[env_or IO_CONSTRAINTS ""] ne ""} { source $::env(IO_CONSTRAINTS) }
 place_pins -hor_layers $::env(IO_H_LAYER) -ver_layers $::env(IO_V_LAYER)
+
+# synthesis buffers out (repair_design re-buffers from real distances); optionally a buffer on every port
+remove_buffers
+if {[env_or BUFFER_PORTS 0]} { buffer_ports }
 
 # full placement, timing and routability driven unless switched off
 set gpl_args {}

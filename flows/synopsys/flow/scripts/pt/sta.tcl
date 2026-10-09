@@ -14,7 +14,7 @@ set rpt    $out/$name.rpt
 
 # --- 1. libraries, netlist, constraints, parasitics ---
 set_app_var search_path [list .]
-set_app_var link_path   [concat * $::env(CELL_DB)]   ;# cells at this corner
+set_app_var link_path   [concat * $::env(CELL_DB) [env_or MACRO_DBS ""]]   ;# cells and hard macros at this corner
 read_verilog $::env(NETLIST)
 current_design $top
 if {[link_design $top] eq "0"} { error "link_design $top failed" }

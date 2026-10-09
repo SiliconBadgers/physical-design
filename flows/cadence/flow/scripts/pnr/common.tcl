@@ -26,13 +26,22 @@ proc sb_connect_pg {} {
 # new design from the synthesis netlist (floorplan stage)
 proc sb_init_design {} {
     read_mmmc $::env(SCRIPTS)/mmmc.tcl
-    read_physical -lef [concat $::env(TECH_LEF) $::env(CELL_LEF)]
+    read_physical -lef [concat $::env(TECH_LEF) $::env(CELL_LEF) [env_or MACRO_LEFS ""]]
     read_netlist $::env(NETLIST) -top $::env(TOP)
     set_db init_power_nets $::env(PWR_NET)
     set_db init_ground_nets $::env(GND_NET)
     init_design
     sb_settings
     sb_connect_pg
+}
+
+# instances of the hard macros (cells named in MACROS)
+proc sb_macro_insts {} {
+    set insts {}
+    foreach cell [env_or MACROS ""] {
+        foreach inst [get_db insts -if ".base_cell.name == $cell"] { lappend insts $inst }
+    }
+    return $insts
 }
 
 # stage database: <stage>.db in the build directory

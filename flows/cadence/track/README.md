@@ -41,6 +41,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `finish` | Innovus, Quantus, Tempus, Voltus | `finish.db`, `final.v`, `final_lvs.v`, `final_<corner>.spef`, `finish.json`, `finish_sta.rpt`, `ir/` |
 | `gds` | Innovus | `final.gds` |
 | `drc`, `lvs` | Pegasus | `drc_count.txt`, `drc/`; `lvs.rpt`, `lvs/` |
+| `abstract` | Innovus | `abstract/<top>.{lef,gds,v}`, `abstract/<top>_<corner>.lib`: the design as a macro (`.v`: LVS netlist) |
 | `all` | | every stage above |
 
 Settings in `designs/<design>/design.mk`, or on the `make` line: `CORE_UTILIZATION`, `ASPECT_RATIO`, `CORE_MARGIN`, `PLACE_DENSITY`, `IO_CONSTRAINTS`, `GPL_TIMING_DRIVEN`, `CTS_BUF_LIST`, `CTS_INV_LIST`, `SKIP_CTS_REPAIR_TIMING`, `PDN_STRAP_PITCH`.
@@ -57,10 +58,19 @@ Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `E
 | `flow/scripts/genus/`, `tempus/`, `voltus/`, `pegasus/` | the other tool steps |
 | `designs/<name>/` | `design.mk`, `constraint.sdc`, `hal_waivers.txt` (this track); `rtl/`, `tb/` (shared) |
 
+## Macros
+
+- A design lists the designs it uses as hard macros in `design.mk`: `MACROS := sb_sram_256x8`.
+- Every stage from `synth` on first runs `make abstract` for each macro (variant `MACRO_VARIANT`, default `base`) in its own make, so knobs on your command line do not reach the macro.
+- Placement: rows of macros from the top of the core, `MACRO_CHANNEL` (default 80 um) apart and from the core edge; `MACRO_HALO` (default 10 um) keeps standard cells out around each macro. With macros, the core is sized from the area of every instance and grown until they fit.
+- The macro's power pins are its met4 straps (its `pdn.tcl`); the met5 straps of the top grid cross the macro and connect to them. The macro routes up to met4 only (`MACRO_TOP_LAYER` in the platform file).
+- The tile reads the macro LEF and timing models in Genus, Innovus and Tempus, merges its GDS, and LVS reads its netlist.
+
 ## Status
 
 - gcd: written, not yet run on Cadence tools. Checked without them: Tcl, shell and Python syntax, and `make all` with stub tools.
-- Not yet: designs with macros, LEC and GLS.
+- tile and sb_sram_256x8: written, not yet run on Cadence tools. Checked without them: Tcl syntax, the floorplan and power-grid scripts against mocked commands, and `make` with stub tools (macro first, rebuild scope).
+- Not yet: LEC and GLS.
 
 ## Notes
 
@@ -87,5 +97,8 @@ The scripts were written against the tool documentation. On the first run on a l
 11. `make drc`: Pegasus accepts the control file and `#DEFINE NODEN`; `drc_count.txt` matches the total in `drc/gcd.drc.sum` (else fix the count in `drc.sh`).
 12. `make lvs`: passes on `MATCH` without `MISMATCH` in `lvs/gcd.lvs.rpt`; fix that check in `flow/Makefile` if Pegasus words it otherwise. Decap and tie cells are in the CDL; plain fillers are left out of `final_lvs.v`.
 13. Note the gcd WNS and `runtimes.txt`; adjust the 6 ns starting period in `designs/gcd/constraint.sdc` if needed.
+14. `make abstract DESIGN=sb_sram_256x8`: `write_timing_model` (or `do_extract_model`) writes three `.lib`; `write_lef_abstract` (`-stripe_pins`, `-pg_pin_layers`, `-specify_top_layer`) writes the met4 straps as `VDD`/`VSS` pins and no met5; `final_lvs.v` has `VDD`/`VSS` ports. In `final.gds` every signal pin has metal on datatype 20 under its datatype-16 shape.
+15. `make floorplan DESIGN=tile`: the `SB: macro` lines and the GUI show four macros 80 um apart, halos, no rows or met4 straps over them, and met4 to met5 vias on their power pins (`floorplan_pg.rpt` clean). `place_inst`, `create_place_halo -all_blocks`, `create_route_halo`, `cut_rows -area` and `add_stripes -area_blockage` are accepted (no `SB-WARNING`).
+16. `make gds lvs DESIGN=tile`: `gds.log` shows how `-uniquify_cell_names` treats the library cells that are in both the cell GDS and the macro GDS; LVS matches with `sb_sram_256x8` as its own cell. If Voltus stops on the macro in `finish` (no power-grid view), run with `SKIP_IR=1`.
 
 Back: [README.md](../README.md)

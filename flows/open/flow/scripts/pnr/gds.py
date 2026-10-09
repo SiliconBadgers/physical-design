@@ -1,6 +1,6 @@
 # File:        gds.py
 # Author:      Isaac Hagedorn
-# Date:        2026-10-08
+# Date:        2026-10-09
 # Description: KLayout script that merges the routed DEF with the cell layouts into one GDS.
 # Run: klayout -zz -rd in_def=<def> -rd lefs="<lef ...>" -rd gds_in="<gds ...>" -rd lyt=<lyt> -rd top=<top> -rd out=<gds> -r gds.py
 import pya
@@ -13,6 +13,15 @@ opts.lefdef_config.lef_files = lefs.split()
 layout = pya.Layout()
 layout.read(in_def, opts)
 top_cell = layout.cell(top)
+
+# DEF pins come in as pin markers only (datatype 16); draw the metal under them (datatype 20)
+# so a wire that ends at the edge of this block still connects
+for li in list(layout.layer_indexes()):
+    info = layout.get_info(li)
+    if info.datatype == 16:
+        drawing = layout.layer(info.layer, 20)
+        for shape in top_cell.shapes(li).each(pya.Shapes.SBoxes | pya.Shapes.SPolygons):
+            top_cell.shapes(drawing).insert(shape)
 
 # empty the LEF abstracts so the cell GDS fills them in
 for cell in layout.each_cell():

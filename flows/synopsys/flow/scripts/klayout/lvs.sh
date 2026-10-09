@@ -2,7 +2,7 @@
 # File:        lvs.sh
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: KLayout LVS of the final GDS against the IC Compiler II LVS netlist, with the open sky130hd deck. Usage: lvs.sh <top> <netlist.v> <gds> <cells.cdl> <deck.lylvs>; run it from the build folder.
+# Description: KLayout LVS of the final GDS against the IC Compiler II LVS netlist, with the open sky130hd deck. Usage: lvs.sh <top> <netlist.v> <gds> <cells.cdl> <deck.lylvs> [<macro.cdl> ...]; run it from the build folder.
 set -euo pipefail
 
 top=$1        # top cell
@@ -10,11 +10,14 @@ netlist=$2    # Verilog netlist with power pins and physical cells (final_lvs.v)
 gds=$3        # layout
 cell_cdl=$4   # cell subcircuits
 deck=$5       # LVS deck
+macro_cdl=("${@:6}")   # subcircuits of the hard macros
 here=$(cd "$(dirname "$0")" && pwd)
 
-# schematic side: the netlist as one CDL subcircuit, then the cells
-python3 "$here/v2cdl.py" "$netlist" --top "$top" --cdl "$cell_cdl" -o final.cdl
-cat final.cdl "$cell_cdl" > final_concat.cdl
+# schematic side: the netlist as one CDL subcircuit, then the cells and macros
+cdl_args=(--cdl "$cell_cdl")
+for f in ${macro_cdl[@]+"${macro_cdl[@]}"}; do cdl_args+=(--cdl "$f"); done
+python3 "$here/v2cdl.py" "$netlist" --top "$top" "${cdl_args[@]}" -o final.cdl
+cat final.cdl "$cell_cdl" ${macro_cdl[@]+"${macro_cdl[@]}"} > final_concat.cdl
 
 # layout side: the GDS; KLayout extracts it and compares
 "${KLAYOUT:-klayout}" -b -rd in_gds="$gds" -rd cdl_file="$PWD/final_concat.cdl" -rd top_cell="$top" \

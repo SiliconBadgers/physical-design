@@ -11,17 +11,18 @@ set incdirs   [env_or RTL_INCDIRS ""]           ;# folders searched by `include
 set defines   [env_or RTL_DEFINES ""]           ;# macros, NAME or NAME=VALUE
 set sdc       $::env(SDC_FILE)                  ;# constraints
 set cell_db   $::env(CELL_DB)                   ;# standard cells (.db) at the synthesis corner
+set macro_dbs [env_or MACRO_DBS ""]             ;# hard macro timing models (.db) at the synthesis corner
 set dont_use  [env_or DONT_USE ""]              ;# cell name patterns synthesis must not use
 set compile   [env_or DC_COMPILE compile_ultra] ;# compile_ultra or compile
 set flatten   [env_or SYNTH_FLATTEN 1]          ;# 1 = one flat netlist
 set retime    [env_or SYNTH_RETIME 0]           ;# 1 = compile_ultra -retime
 
 # --- 1. libraries ---
-# target_library: cells DC may pick. link_library: where DC looks up every instance.
+# target_library: cells DC may pick. link_library: where DC looks up every instance (hard macros too).
 set_app_var search_path       [concat . $incdirs [get_app_var search_path]]
 set_app_var target_library    $cell_db
 set_app_var synthetic_library dw_foundation.sldb   ;# DesignWare (adders, comparators)
-set_app_var link_library      [concat * $cell_db dw_foundation.sldb]
+set_app_var link_library      [concat * $cell_db $macro_dbs dw_foundation.sldb]
 set_svf synth.svf                                   ;# change log for Formality
 
 # --- 2. read the RTL ---

@@ -1,7 +1,7 @@
 # File:        Makefile
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: SiliconBadgers RTL-to-GDS flow on sky130_scl_9T with Cadence tools: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs. Run `make help` for usage.
+# Description: SiliconBadgers RTL-to-GDS flow on sky130_scl_9T with Cadence tools: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs, abstract. Run `make help` for usage.
 
 SHELL       := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -46,6 +46,8 @@ include $(DESIGN_DIR)/design.mk
 RTL_INCDIRS      ?=
 RTL_DEFINES      ?=
 TB_SOURCES       ?=
+MACRO_VERILOG    ?=
+MACRO_SIM_MODELS ?=
 LINT_WAIVERS     ?= $(wildcard $(DESIGN_DIR)/hal_waivers.txt)
 CORE_UTILIZATION ?= 40
 ASPECT_RATIO     ?= 1
@@ -59,6 +61,8 @@ CTS_INV_LIST     ?= CLKINVX1 CLKINVX2 CLKINVX4 CLKINVX8
 SKIP_CTS_REPAIR_TIMING ?= 0
 # um between VDD/VSS strap pairs (met4 and met5)
 PDN_STRAP_PITCH  ?= 50
+# power grid script sourced by floorplan.tcl
+PDN_TCL          ?= $(SCRIPTS)/pnr/power.tcl
 # corners for setup and for hold (Innovus and Tempus)
 # tt by default, like track-a; add ss/ff for full signoff
 SETUP_CORNERS    ?= tt
@@ -69,6 +73,21 @@ EXTRACT_EFFORT   ?= signoff
 SKIP_IR          ?= 0
 # 1 = Pegasus also checks metal density (fails without metal fill)
 DRC_DENSITY      ?= 0
+# hard macros: designs built first and used as abstracts (design.mk: MACROS := <design> ...)
+MACROS        ?=
+MACRO_VARIANT ?= base
+macro_abs      = $(SB_ROOT)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
+# timing models of the macros at one corner
+macro_libs     = $(foreach m,$(MACROS),$(call macro_abs,$(m))_$(1).lib)
+MACRO_LIBS    := $(foreach c,$(CORNERS),$(call macro_libs,$(c)))
+MACRO_LEFS    := $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
+MACRO_GDS     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
+# netlists for LVS
+MACRO_LVS     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).v)
+MACRO_FILES   := $(MACRO_LEFS) $(MACRO_LIBS) $(MACRO_GDS) $(MACRO_LVS)
+# placement keep-out for standard cells around each macro, and minimum channel between macros and to the core edge (um)
+MACRO_HALO    ?= 10
+MACRO_CHANNEL ?= 80
 
 # run name; each variant keeps its own build directory
 VARIANT ?= base
@@ -82,11 +101,13 @@ PGV     := $(PGV_DIR)/techonly.cl
 FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs abstract macros clean FORCE
+# stages run in order (macros are built before synthesis)
+.NOTPARALLEL:
 FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
-	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | all | clean | info"
+	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | abstract | all | clean | info"
 	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
 	@echo "  info:    settings, tools found on PATH, PDK files present"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
@@ -107,18 +128,28 @@ print-%:
 all: lint sim synth sta floorplan place cts grt route finish gds drc lvs
 
 lint:      $(BUILD)/lint.log
-sim:       $(BUILD)/results.xml
-synth:     $(BUILD)/netlist.v
-sta:       $(BUILD)/sta.json
-floorplan: $(BUILD)/floorplan.json
-place:     $(BUILD)/place.json
-cts:       $(BUILD)/cts.json
-grt:       $(BUILD)/grt.json
-route:     $(BUILD)/route.json
-finish:    $(BUILD)/finish.json
-gds:       $(BUILD)/final.gds
-drc:       $(BUILD)/drc_count.txt
-lvs:       $(BUILD)/lvs.rpt
+sim:       $(if $(TB_MODULE),$(BUILD)/results.xml)
+synth:     macros $(BUILD)/netlist.v
+sta:       macros $(BUILD)/sta.json
+floorplan: macros $(BUILD)/floorplan.json
+place:     macros $(BUILD)/place.json
+cts:       macros $(BUILD)/cts.json
+grt:       macros $(BUILD)/grt.json
+route:     macros $(BUILD)/route.json
+finish:    macros $(BUILD)/finish.json
+gds:       macros $(BUILD)/final.gds
+drc:       macros $(BUILD)/drc_count.txt
+lvs:       macros $(BUILD)/lvs.rpt
+abstract:  macros $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
+
+# build each macro's abstract in its own make: no command-line settings (make exports them too) except the tools, PDK, NCPU and -n
+MACRO_MAKE_VARS := SB_PDK NCPU GENUS INNOVUS TEMPUS VOLTUS GENUS_FLAGS INNOVUS_FLAGS TEMPUS_FLAGS VOLTUS_FLAGS
+cmdline_vars     = $(strip $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v))))
+macros:
+	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(cmdline_vars)) \
+	  $(MAKE) --no-print-directory $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) -C $(SB_ROOT) abstract \
+	  DESIGN=$(m) VARIANT=$(MACRO_VARIANT) $(foreach v,$(MACRO_MAKE_VARS),$(v)='$($(v))') &&) true
+$(MACRO_FILES): ;
 
 clean:
 	rm -rf $(BUILD)
@@ -127,22 +158,22 @@ $(BUILD):
 	mkdir -p $@
 
 # --- lint (Xcelium HAL; a warning fails unless hal_waivers.txt waives it) ---
-$(BUILD)/lint.log: $(RTL_FILES) $(LINT_WAIVERS) $(FLOW_DEPS) $(SCRIPTS)/lint/hal_check.py | $(BUILD)
+$(BUILD)/lint.log: $(RTL_FILES) $(MACRO_VERILOG) $(LINT_WAIVERS) $(FLOW_DEPS) $(SCRIPTS)/lint/hal_check.py | $(BUILD)
 	mkdir -p $(BUILD)/lint
 	cd $(BUILD)/lint && rc=0 && \
 	  { $(TIMED) lint $(XRUN) -hal -sv -top $(TOP) $(addprefix -incdir ,$(RTL_INCDIRS)) \
-	    $(addprefix -define ,$(RTL_DEFINES)) $(RTL_FILES) < /dev/null > hal.log 2>&1 || rc=$$?; } && \
+	    $(addprefix -define ,$(RTL_DEFINES)) $(RTL_FILES) $(MACRO_VERILOG) < /dev/null > hal.log 2>&1 || rc=$$?; } && \
 	  echo "SB: xrun exit status $$rc" >> hal.log
 	python3 $(SCRIPTS)/lint/hal_check.py $(BUILD)/lint/hal.log $(LINT_WAIVERS) > $@.tmp || \
 	  { cat $@.tmp; rm -f $@.tmp; echo "lint FAILED -- read $(BUILD)/lint/hal.log"; exit 1; }
 	@mv $@.tmp $@ && cat $@
 
 # --- sim (cocotb on the RTL, Xcelium) ---
-$(BUILD)/results.xml: $(RTL_FILES) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py | $(BUILD)
+$(BUILD)/results.xml: $(RTL_FILES) $(MACRO_SIM_MODELS) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py | $(BUILD)
 	$(TIMED) sim python3 $(SCRIPTS)/sim/run_cocotb.py --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
 	  --build-dir $(BUILD)/sim_rtl --results $@ --waves $(WAVES) \
 	  $(addprefix --incdir ,$(RTL_INCDIRS)) $(addprefix --define ,$(RTL_DEFINES)) \
-	  --sources $(RTL_FILES) $(TB_SOURCES)
+	  --sources $(RTL_FILES) $(MACRO_SIM_MODELS) $(TB_SOURCES)
 
 # --- inputs for the Tcl scripts; an env file is replaced only when its content changes ---
 # corners, libraries and SDC for flow/scripts/mmmc.tcl (Genus, Innovus, Tempus)
@@ -152,7 +183,8 @@ MMMC_ENV = \
   echo "export LIB_ss='$(LIB_ss)' LIB_tt='$(LIB_tt)' LIB_ff='$(LIB_ff)' LIB_EXTRA='$(LIB_EXTRA)'"; \
   echo "export QRC_TECH='$(QRC_TECH)' QRC_LAYER_MAP='$(QRC_LAYER_MAP)'"; \
   echo "export SETUP_CORNERS='$(SETUP_CORNERS)' HOLD_CORNERS='$(HOLD_CORNERS)'"; \
-  echo "export TECH_LEF='$(TECH_LEF)' CELL_LEF='$(CELL_LEF)'";
+  echo "export TECH_LEF='$(TECH_LEF)' CELL_LEF='$(CELL_LEF)' MACRO_LEFS='$(MACRO_LEFS)'"; \
+  echo "export MACRO_LIB_ss='$(call macro_libs,ss)' MACRO_LIB_tt='$(call macro_libs,tt)' MACRO_LIB_ff='$(call macro_libs,ff)'";
 write_env = { $(1) } > $@.tmp; cmp -s $@.tmp $@ && rm $@.tmp || mv $@.tmp $@
 
 $(BUILD)/synth.env: FORCE | $(BUILD)
@@ -176,7 +208,9 @@ $(BUILD)/pnr.env: FORCE | $(BUILD)
 	  echo "export IO_CONSTRAINTS='$(abspath $(IO_CONSTRAINTS))' PDN_STRAP_PITCH='$(PDN_STRAP_PITCH)'"; \
 	  echo "export CTS_BUF_LIST='$(CTS_BUF_LIST)' CTS_INV_LIST='$(CTS_INV_LIST)'"; \
 	  echo "export SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)' EXTRACT_EFFORT='$(EXTRACT_EFFORT)'"; \
-	  echo "export STREAM_MAP='$(STREAM_MAP)' CELL_GDS='$(CELL_GDS)' PGV_DIR='$(PGV_DIR)'";)
+	  echo "export STREAM_MAP='$(STREAM_MAP)' CELL_GDS='$(CELL_GDS)' PGV_DIR='$(PGV_DIR)'"; \
+	  echo "export PDN_TCL='$(PDN_TCL)' MACROS='$(MACROS)' MACRO_GDS='$(MACRO_GDS)' MACRO_TOP_LAYER='$(MACRO_TOP_LAYER)'"; \
+	  echo "export MACRO_HALO='$(MACRO_HALO)' MACRO_CHANNEL='$(MACRO_CHANNEL)' MACRO_GRID='$(MACRO_GRID)'";)
 
 # --- Cadence tool runs ---
 # $(call cadence,<step>,<env file>,<command>): run the command in the build directory, output in <step>.log.
@@ -192,7 +226,7 @@ tempus  = $(TEMPUS) $(TEMPUS_FLAGS) -log logs/$(1) -files $(SCRIPTS)/tempus/sta.
 voltus  = $(VOLTUS) $(VOLTUS_FLAGS) -log logs/$(1) -files $(SCRIPTS)/voltus/$(2).tcl
 
 # --- synth (Genus), then the latch, loop and missing-cell check ---
-$(BUILD)/netlist.v: $(BUILD)/synth.env $(RTL_FILES) $(SDC_FILE) $(FLOW_DEPS) $(SCRIPTS)/genus/synth.tcl \
+$(BUILD)/netlist.v: $(BUILD)/synth.env $(RTL_FILES) $(MACRO_LIBS) $(MACRO_LEFS) $(SDC_FILE) $(FLOW_DEPS) $(SCRIPTS)/genus/synth.tcl \
                     $(SCRIPTS)/mmmc.tcl $(SCRIPTS)/util/sb_util.tcl $(SCRIPTS)/genus/synth_check.py
 	rm -f $@
 	$(call cadence,synth,synth.env,$(call genus,synth))
@@ -207,7 +241,7 @@ $(BUILD)/sta.json: $(BUILD)/netlist.v $(BUILD)/synth.env $(SCRIPTS)/tempus/sta.t
 PNR_DEPS := $(BUILD)/pnr.env $(SDC_FILE) $(SCRIPTS)/pnr/common.tcl $(SCRIPTS)/mmmc.tcl $(SCRIPTS)/util/sb_util.tcl
 pnr_stage = rm -f $(BUILD)/$(1).json && $(call cadence,$(1),pnr.env,$(call innovus,$(1)))
 
-$(BUILD)/floorplan.json: $(BUILD)/netlist.v $(PNR_DEPS) $(SCRIPTS)/pnr/floorplan.tcl $(SCRIPTS)/pnr/power.tcl $(IO_CONSTRAINTS)
+$(BUILD)/floorplan.json: $(BUILD)/netlist.v $(MACRO_LEFS) $(PNR_DEPS) $(SCRIPTS)/pnr/floorplan.tcl $(PDN_TCL) $(IO_CONSTRAINTS)
 	$(call pnr_stage,floorplan)
 $(BUILD)/place.json: $(BUILD)/floorplan.json $(PNR_DEPS) $(SCRIPTS)/pnr/place.tcl
 	$(call pnr_stage,place)
@@ -232,8 +266,16 @@ $(PGV): | $(BUILD)/pnr.env
 	  { $(call voltus,pgv,pgv) < /dev/null > pgv.log 2>&1 || true; }
 	@test -e $@ || { tail -20 $(PGV_DIR)/pgv.log; echo "pgv FAILED -- read $(PGV_DIR)/pgv.log"; exit 1; }
 
-# --- layout: GDS with the cell layouts merged in (Innovus) ---
-$(BUILD)/final.gds: $(BUILD)/finish.json $(BUILD)/pnr.env $(SCRIPTS)/pnr/gds.tcl
+# --- abstract of this design for use as a macro: LEF, timing model per corner, LVS netlist; GDS copied on its own ---
+$(BUILD)/abstract/$(TOP).lef: $(BUILD)/finish.json $(PNR_DEPS) $(SCRIPTS)/pnr/abstract.tcl
+	$(call pnr_stage,abstract)
+	cp $(BUILD)/final_lvs.v $(BUILD)/abstract/$(TOP).v
+$(BUILD)/abstract/$(TOP).gds: $(BUILD)/final.gds
+	mkdir -p $(@D)
+	cp $< $@
+
+# --- layout: GDS with the cell and macro layouts merged in (Innovus) ---
+$(BUILD)/final.gds: $(BUILD)/finish.json $(MACRO_GDS) $(BUILD)/pnr.env $(SCRIPTS)/pnr/gds.tcl
 	rm -f $@
 	$(call cadence,gds,pnr.env,$(call innovus,gds))
 
@@ -244,8 +286,8 @@ $(BUILD)/drc_count.txt: $(BUILD)/final.gds $(SCRIPTS)/pegasus/drc.sh
 	  $(DRC_DECK) final.gds $(TOP) drc $@ > drc.log 2>&1 || { tail -5 drc.log; echo "DRC FAILED -- read $(BUILD)/drc.log"; exit 1; }
 	@echo "Pegasus DRC violations: $$(cat $@) (results in $(BUILD)/drc/)"
 
-$(BUILD)/lvs.rpt: $(BUILD)/final.gds $(SCRIPTS)/pegasus/lvs.sh
+$(BUILD)/lvs.rpt: $(BUILD)/final.gds $(MACRO_LVS) $(SCRIPTS)/pegasus/lvs.sh
 	cd $(BUILD) && $(TIMED) lvs $(PEGASUS_ENV) $(SCRIPTS)/pegasus/lvs.sh $(LVS_DECK) final.gds $(TOP) lvs \
-	  final_lvs.v $(CELL_CDL) > lvs.log 2>&1 || { tail -5 lvs.log; echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
+	  final_lvs.v $(CELL_CDL) $(MACRO_LVS) > lvs.log 2>&1 || { tail -5 lvs.log; echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
 	@r=$(BUILD)/lvs/$(TOP).lvs.rpt; grep -qE '\bMATCH\b' $$r && ! grep -qE 'MISMATCH' $$r && cp $$r $@ && \
 	  echo "LVS: layout matches netlist" || { echo "LVS FAILED -- read $$r"; exit 1; }

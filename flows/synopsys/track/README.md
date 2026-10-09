@@ -13,7 +13,7 @@ The flow on sky130hd with Synopsys tools, and KLayout for DRC and LVS. Same stag
 | IC Compiler II | `icc2_shell` | `floorplan` to `finish`, `gds` |
 | StarRC | `StarXtract` | extraction in `finish` |
 | KLayout | `klayout` | `drc`, `lvs` with the open sky130hd decks (no IC Validator decks exist for sky130) |
-| Library Compiler, IC Compiler II Library Manager, `grdgenxo` | `lc_shell`, `icc2_lm_shell`, `grdgenxo` | only `make_views.sh`, once |
+| Library Compiler, IC Compiler II Library Manager, `grdgenxo` | `lc_shell`, `icc2_lm_shell`, `grdgenxo` | `make_views.sh` (once); `lc_shell` and `icc2_lm_shell` also in `abstract` |
 
 Assumed versions: the V-2023.12 releases or newer of Design Compiler, PrimeTime, IC Compiler II, StarRC and VCS (app-option names change between releases; see the checklist). KLayout 0.30.12, cocotb 2.1.0 and Python 3.9 or newer, as Track A.
 
@@ -38,7 +38,8 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `floorplan` `place` `cts` `grt` `route` | IC Compiler II | checkpoint `icc2/<stage>/<top>.nlib`, `<stage>.log`, `.rpt`, `.json` (metrics) |
 | `finish` | IC Compiler II, StarRC, PrimeTime | `final.v`, `final_lvs.v`, `final.def`, `final.spef`, `signoff_<corner>.rpt`, `finish.json` |
 | `gds`, `drc`, `lvs` | IC Compiler II, KLayout | `final.gds`, `drc.lyrdb`, `lvs.lvsdb` |
-| `all` | | every stage above |
+| `abstract` | IC Compiler II, PrimeTime, Library Compiler, KLayout | `abstract/<top>.{lef,lib,gds,cdl}`, `<top>_<corner>.db`, `<top>.ndm`: the design as a macro |
+| `all` | | every stage above (not `abstract`) |
 
 - Sign-off corners: `tt` for setup and hold by default (`SETUP_CORNERS=tt`, `HOLD_CORNERS=tt`), like track A, so the metrics compare. IC Compiler II fixes setup and hold in those scenarios.
 - `finish.json` gets its timing from PrimeTime with the StarRC parasitics (worst over the corners); area and utilization come from IC Compiler II. A value a script could not read is `null`.
@@ -55,6 +56,8 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `DC_COMPILE` `SYNTH_FLATTEN` `SYNTH_RETIME` | `compile_ultra` `1` `0` | synthesis |
 | `GDS_TOOL` | `icc2` | `klayout` merges `final.def` with the cell GDS instead of `write_gds` |
 | `LINT_TOOL`, `CORES` | `auto`, `4` | `vc` or `vcs`; CPU cores per tool |
+| `MACRO_HALO`, `MACRO_CHANNEL` | `10`, `80` | um: standard-cell keep-out around each macro; space between macros and to the core edge |
+| `MACRO_VARIANT` | `base` | variant of the macros' builds |
 
 ## Layout
 
@@ -62,15 +65,25 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 |---|---|
 | `flow/Makefile` | stages and their inputs |
 | `flow/platforms/sky130hd.mk` | PDK files, corners and cells |
-| `flow/scripts/` | one folder per tool: `dc`, `pt`, `icc2`, `starrc`, `klayout`, `lint`, `sim`; `util/` has the shell wrapper and metrics procs |
+| `flow/scripts/` | one folder per tool: `dc`, `pt`, `icc2`, `starrc`, `lc`, `klayout`, `lint`, `sim`; `util/` has the shell wrapper and metrics procs |
 | `designs/<name>/` | `design.mk`, `constraint.sdc` (this track); `rtl/`, `tb/` (shared) |
+
+## Macros
+
+- A design lists the designs it uses as hard macros in `design.mk`: `MACROS := sb_sram_256x8`.
+- Every stage first runs `make abstract` for each macro (variant `MACRO_VARIANT`) in its own make, so knobs on your command line do not reach the macro.
+- `abstract`: LEF from the IC Compiler II frame (`create_frame -block_all used_layers`), a PrimeTime `extract_model` per corner with the StarRC parasitics (`<top>.lib` is tt), compiled to `.db`, and an IC Compiler II library (`.ndm`) from both. Design Compiler and PrimeTime read the `.db`, IC Compiler II the `.ndm`.
+- Placement (`macro_place.tcl`): rows from the top-left of the core, `MACRO_CHANNEL` apart and from the core edge, on the met2/met4 and met3/met5 track grid; a hard keep-out margin of `MACRO_HALO`.
+- The macro routes up to met4 (`MAX_ROUTING_LAYER` in its `design.mk`); its met4 straps are its power pins. The parent's met1 rails and met4 straps stop at the macro, its met5 straps cross it and connect to those pins.
+- Every `final.gds` gets drawing metal under its top-level pin shapes (`pin_metal.py`), so a wire that ends at a macro pin connects.
 
 ## Status
 
 - Written, not yet run on Synopsys tools.
 - Checked without them: Tcl, shell and Python syntax; `make all DESIGN=gcd` with stub tools (every stage, reruns, variants, a failing stage); the KLayout steps for real on Track A's gcd layout (0 DRC violations, LVS match through `v2cdl.py`, also with `GDS_TOOL=klayout`).
 - The 6 ns clock comes from Track A, which signs off at tt. Track A's routed gcd timed at ss with the same Liberty files has −3.2 ns setup slack, so expect negative setup slack in a full-signoff variant (`SETUP_CORNERS=ss HOLD_CORNERS=ff`) until the clock is recalibrated.
-- Not yet: designs with macros (the tile), LEC, IR drop (needs a rail analysis tool and rail views of the cells).
+- The tile (`DESIGN=tile`, four `sb_sram_256x8` macros): written, not yet run on Synopsys tools. Checked with stub tools (macro build first, reruns, knob isolation); the KLayout steps for real on Track A's tile and block layouts (LVS match with the macro; without `pin_metal.py` the macro does not match).
+- Not yet: LEC, IR drop (needs a rail analysis tool and rail views of the cells).
 
 ## First run checklist
 
@@ -87,5 +100,8 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 11. `make gds`: `write_gds` accepts the layer map, and the GDS has pin labels on datatype 5 (met1 = 68/5), which KLayout LVS reads. If LVS fails on pins, run `make lvs GDS_TOOL=klayout` to tell a layer-map problem from a netlist problem.
 12. `make drc lvs`: 0 violations, netlists match.
 13. Compare `build/gcd/<variant>/*.json` with Track A, then recalibrate the clock at ss and update `constraint.sdc` and this page.
+14. `make abstract DESIGN=sb_sram_256x8`: `floorplan.log` has no `create_terminal` error and `abstract.log` passes the LEF check (VDD and VSS pins on met4); `abstract/<top>_<corner>.lib` has bus pins and the cell `sb_sram_256x8`; `abstract_ndm.log` has no `check_workspace` errors (the LEF and `.db` pins agree).
+15. `make floorplan DESIGN=tile`: the macros link from the `.ndm`; `floorplan.rpt` shows no floating macro power pins (`check_pg_connectivity`), met4 straps and rails stop at the macros and met5 crosses them; `macro_place.tcl` placed four macros.
+16. `make lvs DESIGN=tile`: `write_gds` merges the macro GDS; netlists match. If not, try `GDS_TOOL=klayout` on the macro (`make abstract DESIGN=sb_sram_256x8 GDS_TOOL=klayout`) and on the tile.
 
 Back: [README.md](../README.md)

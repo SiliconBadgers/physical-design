@@ -2,7 +2,7 @@
 # File:        run_starrc.sh
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: StarRC extraction of the routed design (final.def) into final.spef. Inputs are environment variables from pnr.env, written by the Makefile; StarRC works in <build>/starrc/.
+# Description: StarRC extraction of the routed design (final.def) into final.spef; hard macros are black boxes from their LEF. Inputs are environment variables from pnr.env, written by the Makefile; StarRC works in <build>/starrc/.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 out=$OUT_DIR
@@ -29,7 +29,7 @@ MAP
 
 sed -e "s|@TOP@|$TOP|" \
     -e "s|@DEF@|$out/final.def|" \
-    -e "s|@LEFS@|$TECH_LEF $CELL_LEF|" \
+    -e "s|@LEFS@|$TECH_LEF $CELL_LEF${MACRO_LEFS:+ $MACRO_LEFS}|" \
     -e "s|@NXTGRD@|$NXTGRD|" \
     -e "s|@MAP@|$dir/layers.map|" \
     -e "s|@SPEF@|$out/final.spef|" \

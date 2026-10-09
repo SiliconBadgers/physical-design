@@ -1,6 +1,6 @@
 # File:        Makefile
 # Author:      Isaac Hagedorn
-# Date:        2026-10-08
+# Date:        2026-10-09
 # Description: SiliconBadgers RTL-to-GDS flow on sky130hd: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs. Run `make help` for usage.
 
 SHELL       := /bin/bash
@@ -67,6 +67,21 @@ GPL_TIMING_DRIVEN      ?= 1
 GPL_ROUTABILITY_DRIVEN ?= 1
 CTS_BUF_LIST     ?=
 SKIP_CTS_REPAIR_TIMING ?= 0
+# 1: a buffer on every input and output before placement (as ORFS does)
+BUFFER_PORTS     ?= 0
+# hard macros: designs built first and used as abstracts (design.mk: MACROS := <design> ...)
+MACROS        ?=
+MACRO_VARIANT ?= base
+MACRO_CDL     ?=
+macro_abs      = $(SB_ROOT)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
+MACRO_LEFS    += $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
+MACRO_LIBS    += $(foreach m,$(MACROS),$(call macro_abs,$(m)).lib)
+MACRO_GDS     += $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
+MACRO_CDL     += $(foreach m,$(MACROS),$(call macro_abs,$(m)).cdl)
+MACRO_FILES   := $(foreach m,$(MACROS),$(addprefix $(call macro_abs,$(m)),.lef .lib .gds .cdl))
+# keep-out ring for standard cells around each macro, and minimum channel between macros and the core edge (um)
+MACRO_HALO    ?= 10
+MACRO_CHANNEL ?= 80
 export SB_DESIGN_PARAMS := $(DESIGN_PARAMS)
 SYNTH_RTL := $(RTL_FILES) $(MACRO_VERILOG)
 
@@ -85,11 +100,13 @@ FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
 OR_RUN    := $(OPENROAD) -no_init -no_splash -exit
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs compare clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs abstract macros compare clean FORCE
+# stages run in order (macros are built before synthesis)
+.NOTPARALLEL:
 FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
-	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | all | compare | clean | info"
+	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | abstract | all | compare | clean | info"
 	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
 	@echo "  compare: run ORFS on the same netlist and SDC and print both flows' numbers per stage"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
@@ -105,18 +122,28 @@ print-%:
 all: lint sim synth sta floorplan place cts grt route finish gds drc lvs
 
 lint:      $(BUILD)/lint.log
-sim:       $(BUILD)/results.xml
-synth:     $(BUILD)/netlist.v
-sta:       $(BUILD)/sta_tt.rpt
-floorplan: $(BUILD)/floorplan.odb
-place:     $(BUILD)/place.odb
-cts:       $(BUILD)/cts.odb
-grt:       $(BUILD)/grt.odb
-route:     $(BUILD)/route.odb
-finish:    $(BUILD)/final.odb
-gds:       $(BUILD)/final.gds
-drc:       $(BUILD)/drc_count.txt
-lvs:       $(BUILD)/lvs.lvsdb
+sim:       $(if $(TB_MODULE),$(BUILD)/results.xml)
+synth:     macros $(BUILD)/netlist.v
+sta:       macros $(BUILD)/sta_tt.rpt
+floorplan: macros $(BUILD)/floorplan.odb
+place:     macros $(BUILD)/place.odb
+cts:       macros $(BUILD)/cts.odb
+grt:       macros $(BUILD)/grt.odb
+route:     macros $(BUILD)/route.odb
+finish:    macros $(BUILD)/final.odb
+gds:       macros $(BUILD)/final.gds
+drc:       macros $(BUILD)/drc_count.txt
+lvs:       macros $(BUILD)/lvs.lvsdb
+abstract:  $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
+
+# build each macro's abstract in its own make: only the PDK and tool paths pass on, not other command-line settings
+MACRO_MAKE_VARS := SB_PDK YOSYS OPENROAD KLAYOUT
+cmdline_vars     = $(strip $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v))))
+macros:
+	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(cmdline_vars)) \
+	  $(MAKE) --no-print-directory $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) -C $(SB_ROOT) abstract \
+	  DESIGN=$(m) VARIANT=$(MACRO_VARIANT) $(foreach v,$(MACRO_MAKE_VARS),$(v)='$($(v))') &&) true
+$(MACRO_FILES): ;
 
 clean:
 	rm -rf $(BUILD)
@@ -178,7 +205,7 @@ $(BUILD)/abc.constr: $(LIB_tt) $(FLOW_DEPS) $(SCRIPTS)/util/liberty_pin_cap.py |
 	{ echo "set_driving_cell $(DRIVING_CELL)"; \
 	  awk -v c=$$cap 'BEGIN { printf "set_load %.2f\n", 4 * c * 1000 }'; } > $@
 
-$(BUILD)/netlist.v: $(BUILD)/synth.env $(SYNTH_RTL) $(SDC_FILE) $(FLOW_DEPS) $(SCRIPTS)/yosys/synth.tcl \
+$(BUILD)/netlist.v: $(BUILD)/synth.env $(SYNTH_RTL) $(MACRO_LIBS) $(SDC_FILE) $(FLOW_DEPS) $(SCRIPTS)/yosys/synth.tcl \
                     $(if $(filter 1,$(ABC_CONSTR)),$(BUILD)/abc.constr)
 	@test -n "$(CLOCK_PERIOD_PS)" || { echo "could not read the clock period from $(SDC_FILE)"; exit 1; }
 	cd $(BUILD) && source synth.env && \
@@ -224,10 +251,11 @@ $(BUILD)/pnr.env: FORCE | $(BUILD)
 	  echo "export MIN_CLK_ROUTING_LAYER='$(MIN_CLK_ROUTING_LAYER)'"; \
 	  echo "export PDN_TCL='$(PDN_TCL)' TAPCELL_TCL='$(TAPCELL_TCL)' MAKE_TRACKS_TCL='$(MAKE_TRACKS_TCL)'"; \
 	  echo "export SETRC_TCL='$(SETRC_TCL)' FASTROUTE_TCL='$(FASTROUTE_TCL)' RCX_RULES='$(RCX_RULES)'"; \
-	  echo "export CDL_FILE='$(CDL_FILE)'"; \
+	  echo "export CDL_FILE='$(CDL_FILE)' MACRO_CDL='$(MACRO_CDL)'"; \
+	  echo "export MACRO_HALO='$(MACRO_HALO)' MACRO_CHANNEL='$(MACRO_CHANNEL)'"; \
 	  echo "export PWR_NET='$(PWR_NET)' GND_NET='$(GND_NET)' VDD_V='$(VDD_V)'"; \
 	  echo "export CORE_UTILIZATION='$(CORE_UTILIZATION)' ASPECT_RATIO='$(ASPECT_RATIO)' CORE_MARGIN='$(CORE_MARGIN)'"; \
-	  echo "export PLACE_DENSITY='$(PLACE_DENSITY)' IO_CONSTRAINTS='$(IO_CONSTRAINTS)'"; \
+	  echo "export PLACE_DENSITY='$(PLACE_DENSITY)' IO_CONSTRAINTS='$(IO_CONSTRAINTS)' BUFFER_PORTS='$(BUFFER_PORTS)'"; \
 	  echo "export GPL_TIMING_DRIVEN='$(GPL_TIMING_DRIVEN)' GPL_ROUTABILITY_DRIVEN='$(GPL_ROUTABILITY_DRIVEN)'"; \
 	  echo "export CTS_BUF_LIST='$(CTS_BUF_LIST)' SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)'"; \
 	} > $@.tmp
@@ -239,7 +267,7 @@ pnr_stage = cd $(BUILD) && source pnr.env && \
   $(TIMED) $(1) $(OR_RUN) -metrics $(BUILD)/$(1).json $(SCRIPTS)/pnr/$(1).tcl > $(1).log 2>&1 || \
   { tail -20 $(1).log; echo "$(1) FAILED -- read $(BUILD)/$(1).log"; exit 1; }
 
-$(BUILD)/floorplan.odb: $(BUILD)/netlist.v $(PNR_DEPS) $(SCRIPTS)/pnr/floorplan.tcl $(IO_CONSTRAINTS)
+$(BUILD)/floorplan.odb: $(BUILD)/netlist.v $(MACRO_LEFS) $(PNR_DEPS) $(SCRIPTS)/pnr/floorplan.tcl $(IO_CONSTRAINTS)
 	$(call pnr_stage,floorplan)
 $(BUILD)/place.odb: $(BUILD)/floorplan.odb $(PNR_DEPS) $(SCRIPTS)/pnr/place.tcl
 	$(call pnr_stage,place)
@@ -253,8 +281,17 @@ $(BUILD)/route.odb: $(BUILD)/grt.odb $(PNR_DEPS) $(SCRIPTS)/pnr/route.tcl
 $(BUILD)/final.odb: $(BUILD)/route.odb $(PNR_DEPS) $(SCRIPTS)/pnr/finish.tcl
 	$(call pnr_stage,finish)
 
+# abstract of this design for use as a macro: LEF, timing model (tt) and netlist; GDS copied on its own
+$(BUILD)/abstract/$(TOP).lef: $(BUILD)/final.odb $(SCRIPTS)/pnr/abstract.tcl
+	mkdir -p $(BUILD)/abstract
+	$(call pnr_stage,abstract)
+	cp $(BUILD)/final.cdl $(BUILD)/abstract/$(TOP).cdl
+$(BUILD)/abstract/$(TOP).gds: $(BUILD)/final.gds
+	mkdir -p $(@D)
+	cp $< $@
+
 # --- layout: GDS merge and KLayout DRC ---
-$(BUILD)/final.gds: $(BUILD)/final.odb $(SCRIPTS)/pnr/gds.py
+$(BUILD)/final.gds: $(BUILD)/final.odb $(MACRO_GDS) $(SCRIPTS)/pnr/gds.py
 	cd $(BUILD) && $(TIMED) gds $(KLAYOUT) -zz -rd in_def=final.def -rd lefs="$(TECH_LEF) $(CELL_LEF) $(MACRO_LEFS)" \
 	  -rd gds_in="$(CELL_GDS) $(MACRO_GDS)" -rd lyt=$(KLAYOUT_LYT) -rd top=$(TOP) -rd out=final.gds \
 	  -r $(SCRIPTS)/pnr/gds.py > gds.log 2>&1 || { tail -5 gds.log; exit 1; }
@@ -265,8 +302,8 @@ $(BUILD)/drc_count.txt: $(BUILD)/final.gds
 	@grep -c '<value>' $(BUILD)/drc.lyrdb > $@ || true
 	@echo "KLayout DRC violations: $$(cat $@)"
 
-$(BUILD)/lvs.lvsdb: $(BUILD)/final.gds $(CDL_FILE)
-	cat $(BUILD)/final.cdl $(CDL_FILE) > $(BUILD)/final_concat.cdl
+$(BUILD)/lvs.lvsdb: $(BUILD)/final.gds $(CDL_FILE) $(MACRO_CDL)
+	cat $(BUILD)/final.cdl $(CDL_FILE) $(MACRO_CDL) > $(BUILD)/final_concat.cdl
 	cd $(BUILD) && $(TIMED) lvs $(KLAYOUT) -b -rd in_gds=final.gds -rd cdl_file=$(BUILD)/final_concat.cdl \
 	  -rd top_cell=$(TOP) -rd report_file=$(BUILD)/lvs.lvsdb -r $(LVS_DECK) > lvs.log 2>&1 || { tail -5 lvs.log; exit 1; }
 	@grep -q 'Netlists match' $(BUILD)/lvs.log && echo "LVS: netlists match" || { echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }

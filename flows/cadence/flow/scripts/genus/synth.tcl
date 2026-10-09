@@ -16,11 +16,11 @@ set_db syn_generic_effort $effort
 set_db syn_map_effort $effort
 set_db syn_opt_effort $effort
 
-# --- 2. libraries (every corner) and SDC through MMMC, cell abstracts from the LEF ---
+# --- 2. libraries (every corner, macro timing models too) and SDC through MMMC, cell and macro abstracts from the LEF ---
 read_mmmc $::env(SCRIPTS)/mmmc.tcl
-read_physical -lef [concat $::env(TECH_LEF) $::env(CELL_LEF)]
+read_physical -lef [concat $::env(TECH_LEF) $::env(CELL_LEF) [env_or MACRO_LEFS ""]]
 
-# --- 3. read and elaborate the RTL ---
+# --- 3. read and elaborate the RTL (a hard macro instance resolves to its timing model) ---
 if {[env_or RTL_INCDIRS ""] ne ""} { set_db init_hdl_search_path $::env(RTL_INCDIRS) }
 set defines {}
 foreach d [env_or RTL_DEFINES ""] { lappend defines -define $d }

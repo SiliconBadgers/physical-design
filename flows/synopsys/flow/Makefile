@@ -1,7 +1,7 @@
 # File:        Makefile
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: SiliconBadgers RTL-to-GDS flow on sky130hd with Synopsys tools: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs. Run `make help` for usage.
+# Description: SiliconBadgers RTL-to-GDS flow on sky130hd with Synopsys tools: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs, abstract. Run `make help` for usage.
 
 SHELL       := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -20,6 +20,9 @@ PT_SHELL   ?= pt_shell
 ICC2_SHELL ?= icc2_shell
 STARRC     ?= StarXtract
 KLAYOUT    ?= klayout
+# Library Compiler and IC Compiler II Library Manager (macro abstracts)
+LC_SHELL      ?= lc_shell
+ICC2_LM_SHELL ?= icc2_lm_shell
 # CPU cores per tool
 CORES      ?= 4
 
@@ -64,6 +67,25 @@ PDN_TCL          ?= $(SCRIPTS)/icc2/pdn.tcl
 GPL_TIMING_DRIVEN      ?= 1
 GPL_ROUTABILITY_DRIVEN ?= 1
 SKIP_CTS_REPAIR_TIMING ?= 0
+# lint black boxes and simulation models of the hard macros
+MACRO_VERILOG    ?=
+MACRO_SIM_MODELS ?=
+
+# hard macros: designs built first and used as abstracts (design.mk: MACROS := <design> ...)
+MACROS        ?=
+MACRO_VARIANT ?= base
+macro_abs      = $(SB_ROOT)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
+MACRO_LEFS    := $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
+MACRO_GDS     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
+MACRO_CDL     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).cdl)
+MACRO_NDMS    := $(foreach m,$(MACROS),$(call macro_abs,$(m)).ndm)
+# $(call macro_dbs,<corner>): the macros' timing models at one corner
+macro_dbs      = $(foreach m,$(MACROS),$(call macro_abs,$(m))_$(1).db)
+MACRO_DBS     := $(foreach c,$(CORNERS),$(call macro_dbs,$(c)))
+MACRO_FILES   := $(MACRO_LEFS) $(MACRO_GDS) $(MACRO_CDL) $(MACRO_DBS) $(MACRO_NDMS)
+# keep-out ring for standard cells around each macro, and minimum channel between macros and the core edge (um)
+MACRO_HALO    ?= 10
+MACRO_CHANNEL ?= 80
 
 ifneq ($(filter-out $(CORNERS),$(SETUP_CORNERS) $(HOLD_CORNERS) $(SYNTH_CORNER)),)
   $(error corners must be among: $(CORNERS))
@@ -76,7 +98,9 @@ VARIANT ?= base
 BUILD   ?= $(SB_ROOT)/build/$(DESIGN)/$(VARIANT)
 TIMES   := $(BUILD)/runtimes.txt
 TIMED   := $(SCRIPTS)/util/timed.sh $(TIMES)
-CLOCK_PERIOD_NS := $(shell awk '$$1 == "set" && $$2 == "clk_period" { print $$3; exit }' $(SDC_FILE) 2>/dev/null)
+# clock period from the SDC: `set clk_period <ns>` or `set clk_period [expr {<a> / <b>}]`
+CLOCK_PERIOD_NS := $(shell awk '$$1 == "set" && $$2 == "clk_period" { v = $$3; if (v == "[expr") { a = $$4; b = $$6; \
+  gsub(/[^0-9.]/, "", a); gsub(/[^0-9.]/, "", b); v = a / b }; print v; exit }' $(SDC_FILE) 2>/dev/null)
 
 FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
 RUN_DEPS  := $(SCRIPTS)/util/run.tcl $(SCRIPTS)/util/metrics.tcl
@@ -90,11 +114,13 @@ snps = cd $(BUILD) && rm -f $(1).done && source $(4) && \
     echo "$(1) FAILED -- read $(BUILD)/$(1).log from the first Error"; exit 1; }
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs abstract macros clean FORCE
+# stages run in order (macros are built before synthesis)
+.NOTPARALLEL:
 FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
-	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | all | clean | info"
+	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | abstract | all | clean | info"
 	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
 	@echo "  corners: SETUP_CORNERS=$(SETUP_CORNERS) HOLD_CORNERS=$(HOLD_CORNERS) (ss, tt or ff)"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
@@ -111,18 +137,29 @@ print-%:
 all: lint sim synth sta floorplan place cts grt route finish gds drc lvs
 
 lint:      $(BUILD)/lint.log
-sim:       $(BUILD)/results.xml
-synth:     $(BUILD)/synth.done
-sta:       $(foreach c,$(STA_CORNERS),$(BUILD)/sta_$(c).done)
-floorplan: $(BUILD)/floorplan.done
-place:     $(BUILD)/place.done
-cts:       $(BUILD)/cts.done
-grt:       $(BUILD)/grt.done
-route:     $(BUILD)/route.done
-finish:    $(BUILD)/signoff.done
-gds:       $(BUILD)/final.gds
-drc:       $(BUILD)/drc_count.txt
-lvs:       $(BUILD)/lvs.done
+sim:       $(if $(TB_MODULE),$(BUILD)/results.xml)
+synth:     macros $(BUILD)/synth.done
+sta:       macros $(foreach c,$(STA_CORNERS),$(BUILD)/sta_$(c).done)
+floorplan: macros $(BUILD)/floorplan.done
+place:     macros $(BUILD)/place.done
+cts:       macros $(BUILD)/cts.done
+grt:       macros $(BUILD)/grt.done
+route:     macros $(BUILD)/route.done
+finish:    macros $(BUILD)/signoff.done
+gds:       macros $(BUILD)/final.gds
+drc:       macros $(BUILD)/drc_count.txt
+lvs:       macros $(BUILD)/lvs.done
+
+# build each macro's abstract in its own make, without this make's command-line settings (make also exports them
+# to the environment); a dry run stays a dry run
+CMDLINE_VARS = $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v)))
+macros:
+	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(CMDLINE_VARS)) \
+	  $(MAKE) $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) \
+	  --no-print-directory -C $(SB_ROOT) abstract DESIGN=$(m) VARIANT=$(MACRO_VARIANT) SB_PDK=$(SB_PDK) CORES=$(CORES) \
+	  DC_SHELL=$(DC_SHELL) PT_SHELL=$(PT_SHELL) ICC2_SHELL=$(ICC2_SHELL) ICC2_LM_SHELL=$(ICC2_LM_SHELL) \
+	  LC_SHELL=$(LC_SHELL) STARRC=$(STARRC) KLAYOUT=$(KLAYOUT) &&) true
+$(MACRO_FILES): ;
 
 clean:
 	rm -rf $(BUILD)
@@ -137,8 +174,8 @@ $(CELL_DBS) $(CELL_NDM) $(TLUPLUS) $(NXTGRD):
 	@exit 1
 
 # --- lint (VC SpyGlass, or vcs +lint=all) ---
-$(BUILD)/lint.log: $(RTL_FILES) $(FLOW_DEPS) $(SCRIPTS)/lint/run_lint.sh $(SCRIPTS)/lint/vc_lint.tcl | $(BUILD)
-	cd $(BUILD) && TOP='$(TOP)' RTL_FILES='$(RTL_FILES)' RTL_INCDIRS='$(RTL_INCDIRS)' \
+$(BUILD)/lint.log: $(RTL_FILES) $(MACRO_VERILOG) $(FLOW_DEPS) $(SCRIPTS)/lint/run_lint.sh $(SCRIPTS)/lint/vc_lint.tcl | $(BUILD)
+	cd $(BUILD) && TOP='$(TOP)' RTL_FILES='$(strip $(RTL_FILES) $(MACRO_VERILOG))' RTL_INCDIRS='$(RTL_INCDIRS)' \
 	  RTL_DEFINES='$(RTL_DEFINES)' LINT_TOOL='$(LINT_TOOL)' \
 	  $(TIMED) lint bash $(SCRIPTS)/lint/run_lint.sh > lint_run.log 2>&1 || \
 	  { tail -20 lint_run.log; echo "lint FAILED -- read $(BUILD)/lint_run.log"; exit 1; }
@@ -146,11 +183,11 @@ $(BUILD)/lint.log: $(RTL_FILES) $(FLOW_DEPS) $(SCRIPTS)/lint/run_lint.sh $(SCRIP
 	@grep '^SB:' $@ || true
 
 # --- sim (cocotb on the RTL, VCS) ---
-$(BUILD)/results.xml: $(RTL_FILES) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py | $(BUILD)
+$(BUILD)/results.xml: $(RTL_FILES) $(MACRO_SIM_MODELS) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py | $(BUILD)
 	$(TIMED) sim python3 $(SCRIPTS)/sim/run_cocotb.py --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
 	  --build-dir $(BUILD)/sim_rtl --results $@ --waves $(WAVES) \
 	  $(addprefix --incdir ,$(RTL_INCDIRS)) $(addprefix --define ,$(RTL_DEFINES)) \
-	  --sources $(RTL_FILES) $(TB_SOURCES) 2>&1 | tee $(BUILD)/sim.log
+	  --sources $(RTL_FILES) $(MACRO_SIM_MODELS) $(TB_SOURCES) 2>&1 | tee $(BUILD)/sim.log
 
 # --- synth (Design Compiler) ---
 # inputs for synth.tcl; the file is replaced only when its content changes
@@ -164,12 +201,13 @@ $(BUILD)/synth.env: FORCE | $(BUILD)
 	  echo "export RTL_DEFINES='$(strip $(RTL_DEFINES) $(SYNTH_DEFINES))'"; \
 	  echo "export SDC_FILE='$(SDC_FILE)'"; \
 	  echo "export CELL_DB='$(call cell_db,$(SYNTH_CORNER))'"; \
+	  $(if $(MACROS),echo "export MACRO_DBS='$(call macro_dbs,$(SYNTH_CORNER))'";) \
 	  echo "export DONT_USE='$(DONT_USE)'"; \
 	  echo "export DC_COMPILE='$(DC_COMPILE)' SYNTH_FLATTEN='$(SYNTH_FLATTEN)' SYNTH_RETIME='$(SYNTH_RETIME)'"; \
 	} > $@.tmp
 	@cmp -s $@.tmp $@ && rm $@.tmp || mv $@.tmp $@
 
-$(BUILD)/synth.done: $(BUILD)/synth.env $(RTL_FILES) $(SDC_FILE) $(call cell_db,$(SYNTH_CORNER)) $(FLOW_DEPS) \
+$(BUILD)/synth.done: $(BUILD)/synth.env $(RTL_FILES) $(SDC_FILE) $(call cell_db,$(SYNTH_CORNER)) $(call macro_dbs,$(SYNTH_CORNER)) $(FLOW_DEPS) \
                      $(SCRIPTS)/dc/synth.tcl $(RUN_DEPS)
 	@$(call snps,synth,$(DC_SHELL),$(SCRIPTS)/dc/synth.tcl,synth.env)
 
@@ -183,6 +221,7 @@ define sta_env
 	  echo "export NETLIST='$(2)' SPEF='$(3)'"; \
 	  echo "export SDC_FILE='$(SDC_FILE)'"; \
 	  echo "export CELL_DB='$(call cell_db,$(1))'"; \
+	  $(if $(MACROS),echo "export MACRO_DBS='$(call macro_dbs,$(1))'";) \
 	  echo "export SETUP_CORNERS='$(SETUP_CORNERS)' HOLD_CORNERS='$(HOLD_CORNERS)'"; \
 	} > $@.tmp
 	@cmp -s $@.tmp $@ && rm $@.tmp || mv $@.tmp $@
@@ -190,7 +229,7 @@ endef
 
 $(BUILD)/sta_%.env: FORCE | $(BUILD)
 	$(call sta_env,$*,$(BUILD)/netlist.v,)
-$(BUILD)/sta_%.done: $(BUILD)/sta_%.env $(BUILD)/synth.done $(SDC_FILE) $(CELL_DBS) $(SCRIPTS)/pt/sta.tcl $(RUN_DEPS)
+$(BUILD)/sta_%.done: $(BUILD)/sta_%.env $(BUILD)/synth.done $(SDC_FILE) $(CELL_DBS) $(MACRO_DBS) $(SCRIPTS)/pt/sta.tcl $(RUN_DEPS)
 	@$(call snps,sta_$*,$(PT_SHELL),$(SCRIPTS)/pt/sta.tcl,sta_$*.env)
 
 # --- place and route (IC Compiler II, one run per stage; checkpoints in icc2/<stage>/) ---
@@ -214,6 +253,8 @@ $(BUILD)/pnr.env: FORCE | $(BUILD)
 	  echo "export SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)'"; \
 	  echo "export GDS_MAP='$(GDS_MAP)' CELL_GDS='$(CELL_GDS)'"; \
 	  echo "export STARRC='$(STARRC)' TECH_LEF='$(TECH_LEF)' CELL_LEF='$(CELL_LEF)' NXTGRD='$(NXTGRD)'"; \
+	  $(if $(MACROS),echo "export MACRO_NDMS='$(MACRO_NDMS)' MACRO_LEFS='$(MACRO_LEFS)' MACRO_GDS='$(MACRO_GDS)'";) \
+	  $(if $(MACROS),echo "export MACRO_HALO='$(MACRO_HALO)' MACRO_CHANNEL='$(MACRO_CHANNEL)'";) \
 	} > $@.tmp
 	@cmp -s $@.tmp $@ && rm $@.tmp || mv $@.tmp $@
 
@@ -221,7 +262,8 @@ PNR_DEPS := $(BUILD)/pnr.env $(SDC_FILE) $(FLOW_DEPS) $(SCRIPTS)/icc2/common.tcl
 pnr_stage = $(call snps,$(1),$(ICC2_SHELL),$(SCRIPTS)/icc2/$(1).tcl,pnr.env)
 
 $(BUILD)/floorplan.done: $(BUILD)/synth.done $(PNR_DEPS) $(SCRIPTS)/icc2/floorplan.tcl $(SCRIPTS)/icc2/power.upf \
-                         $(PDN_TCL) $(IO_CONSTRAINTS) $(TLUPLUS) | $(CELL_NDM)
+                         $(PDN_TCL) $(IO_CONSTRAINTS) $(TLUPLUS) $(MACRO_LEFS) $(MACRO_DBS) $(MACRO_NDMS) \
+                         $(if $(MACROS),$(SCRIPTS)/icc2/macro_place.tcl) | $(CELL_NDM)
 	@$(call pnr_stage,floorplan)
 $(BUILD)/place.done: $(BUILD)/floorplan.done $(PNR_DEPS) $(SCRIPTS)/icc2/place.tcl
 	@$(call pnr_stage,place)
@@ -243,7 +285,7 @@ $(BUILD)/final.spef: $(BUILD)/finish.done $(BUILD)/pnr.env $(SCRIPTS)/starrc/run
 
 $(BUILD)/signoff_%.env: FORCE | $(BUILD)
 	$(call sta_env,$*,$(BUILD)/final.v,$(BUILD)/final.spef)
-$(BUILD)/signoff_%.done: $(BUILD)/signoff_%.env $(BUILD)/final.spef $(SDC_FILE) $(CELL_DBS) $(SCRIPTS)/pt/sta.tcl $(RUN_DEPS)
+$(BUILD)/signoff_%.done: $(BUILD)/signoff_%.env $(BUILD)/final.spef $(SDC_FILE) $(CELL_DBS) $(MACRO_DBS) $(SCRIPTS)/pt/sta.tcl $(RUN_DEPS)
 	@$(call snps,signoff_$*,$(PT_SHELL),$(SCRIPTS)/pt/sta.tcl,signoff_$*.env)
 
 $(BUILD)/signoff.done: $(foreach c,$(STA_CORNERS),$(BUILD)/signoff_$(c).done) $(SCRIPTS)/util/signoff_metrics.py
@@ -257,14 +299,21 @@ $(BUILD)/gds.env: FORCE | $(BUILD)
 	@echo "export GDS_TOOL='$(GDS_TOOL)'" > $@.tmp
 	@cmp -s $@.tmp $@ && rm $@.tmp || mv $@.tmp $@
 
+# drawing metal under the top cell's pins, so a wire of a parent design that ends at a pin connects
+pin_metal = cd $(BUILD) && $(TIMED) pin_metal $(KLAYOUT) -zz -rd gds=final.gds -rd top=$(TOP) \
+  -r $(SCRIPTS)/klayout/pin_metal.py > pin_metal.log 2>&1 || { tail -5 pin_metal.log; exit 1; }
+$(BUILD)/final.gds: $(SCRIPTS)/klayout/pin_metal.py
+
 ifeq ($(GDS_TOOL),klayout)
-$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(SCRIPTS)/klayout/gds.py
-	cd $(BUILD) && $(TIMED) gds $(KLAYOUT) -zz -rd in_def=final.def -rd lefs="$(TECH_LEF) $(CELL_LEF)" \
-	  -rd gds_in="$(CELL_GDS)" -rd lyt=$(KLAYOUT_LYT) -rd top=$(TOP) -rd out=final.gds \
+$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(MACRO_LEFS) $(MACRO_GDS) $(SCRIPTS)/klayout/gds.py
+	cd $(BUILD) && $(TIMED) gds $(KLAYOUT) -zz -rd in_def=final.def -rd lefs="$(strip $(TECH_LEF) $(CELL_LEF) $(MACRO_LEFS))" \
+	  -rd gds_in="$(strip $(CELL_GDS) $(MACRO_GDS))" -rd lyt=$(KLAYOUT_LYT) -rd top=$(TOP) -rd out=final.gds \
 	  -r $(SCRIPTS)/klayout/gds.py > gds.log 2>&1 || { tail -5 gds.log; exit 1; }
+	$(pin_metal)
 else ifeq ($(GDS_TOOL),icc2)
-$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(PNR_DEPS) $(SCRIPTS)/icc2/gds.tcl
+$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(PNR_DEPS) $(MACRO_GDS) $(SCRIPTS)/icc2/gds.tcl
 	@$(call pnr_stage,gds)
+	$(pin_metal)
 else
   $(error GDS_TOOL=$(GDS_TOOL): use icc2 or klayout)
 endif
@@ -275,9 +324,42 @@ $(BUILD)/drc_count.txt: $(BUILD)/final.gds $(SCRIPTS)/klayout/drc.sh
 	@grep -c '<value>' $(BUILD)/drc.lyrdb > $@ || true
 	@echo "KLayout DRC violations: $$(cat $@)"
 
-$(BUILD)/lvs.done: $(BUILD)/final.gds $(CDL_FILE) $(SCRIPTS)/klayout/lvs.sh $(SCRIPTS)/klayout/v2cdl.py
+$(BUILD)/lvs.done: $(BUILD)/final.gds $(CDL_FILE) $(MACRO_CDL) $(SCRIPTS)/klayout/lvs.sh $(SCRIPTS)/klayout/v2cdl.py
 	cd $(BUILD) && rm -f lvs.done && KLAYOUT=$(KLAYOUT) $(TIMED) lvs bash $(SCRIPTS)/klayout/lvs.sh \
-	  $(TOP) final_lvs.v final.gds $(CDL_FILE) $(LVS_DECK) > lvs_run.log 2>&1 || \
+	  $(strip $(TOP) final_lvs.v final.gds $(CDL_FILE) $(LVS_DECK) $(MACRO_CDL)) > lvs_run.log 2>&1 || \
 	  { tail -5 $(BUILD)/lvs_run.log; echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
 	@grep '^SB:' $(BUILD)/lvs_run.log || true
 	@touch $@
+
+# --- abstract: this design as a hard macro of another design ---
+# LEF (IC Compiler II frame), timing model per corner (PrimeTime, compiled by Library Compiler; <top>.lib is tt),
+# GDS, CDL, and the IC Compiler II reference library built from the LEF and the models
+ABS       := $(BUILD)/abstract
+ABS_FILES := $(ABS)/$(TOP).lef $(ABS)/$(TOP).lib $(ABS)/$(TOP).gds $(ABS)/$(TOP).cdl $(BUILD)/abstract_ndm.done
+abstract: macros $(ABS_FILES)
+
+$(ABS):
+	mkdir -p $@
+
+$(ABS)/$(TOP).lef: $(BUILD)/finish.done $(PNR_DEPS) $(SCRIPTS)/icc2/abstract.tcl | $(ABS)
+	@$(call pnr_stage,abstract)
+
+$(BUILD)/model_%.env: FORCE | $(BUILD)
+	$(call sta_env,$*,$(BUILD)/final.v,$(BUILD)/final.spef)
+$(ABS)/$(TOP)_%.lib: $(BUILD)/model_%.env $(BUILD)/final.spef $(SDC_FILE) $(CELL_DBS) $(MACRO_DBS) $(SCRIPTS)/pt/model.tcl $(RUN_DEPS) | $(ABS)
+	@$(call snps,model_$*,$(PT_SHELL),$(SCRIPTS)/pt/model.tcl,model_$*.env)
+$(ABS)/$(TOP)_%.db: $(ABS)/$(TOP)_%.lib $(SCRIPTS)/lc/lib2db.tcl $(RUN_DEPS)
+	@$(call snps,lib2db_$*,$(LC_SHELL),$(SCRIPTS)/lc/lib2db.tcl,model_$*.env)
+$(ABS)/$(TOP).lib: $(ABS)/$(TOP)_tt.lib
+	cp $< $@
+
+$(BUILD)/abstract_ndm.done: $(ABS)/$(TOP).lef $(foreach c,$(CORNERS),$(ABS)/$(TOP)_$(c).db) $(BUILD)/pnr.env \
+                            $(SCRIPTS)/icc2/abstract_ndm.tcl $(RUN_DEPS)
+	@$(call snps,abstract_ndm,$(ICC2_LM_SHELL),$(SCRIPTS)/icc2/abstract_ndm.tcl,pnr.env)
+
+$(ABS)/$(TOP).gds: $(BUILD)/final.gds $(SCRIPTS)/klayout/abstract_gds.py | $(ABS)
+	cd $(BUILD) && $(KLAYOUT) -zz -rd in_gds=final.gds -rd cells_gds="$(CELL_GDS)" -rd top=$(TOP) -rd out=$@ \
+	  -r $(SCRIPTS)/klayout/abstract_gds.py > abstract_gds.log 2>&1 || { tail -5 abstract_gds.log; exit 1; }
+
+$(ABS)/$(TOP).cdl: $(BUILD)/finish.done $(CDL_FILE) $(MACRO_CDL) $(SCRIPTS)/klayout/v2cdl.py | $(ABS)
+	python3 $(SCRIPTS)/klayout/v2cdl.py $(BUILD)/final_lvs.v --top $(TOP) $(addprefix --cdl ,$(CDL_FILE) $(MACRO_CDL)) -o $@
