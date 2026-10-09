@@ -1,0 +1,15 @@
+# File:        sky130_scl_9T_qrc.map
+# Author:      Isaac Hagedorn
+# Date:        2026-10-09
+# Description: Maps the technology LEF layer names to the layer names in tech/qrcTechFile.
+#              Used by Innovus extraction (extract_rc_lef_tech_file_map) and Voltus (-lef_layer_map).
+# type   Quantus layer   format   LEF layer
+metal    metal1          lefdef   met1
+via      via1            lefdef   via
+metal    metal2          lefdef   met2
+via      via2            lefdef   via2
+metal    metal3          lefdef   met3
+via      via3            lefdef   via3
+metal    metal4          lefdef   met4
+via      via4            lefdef   via4
+metal    metal5          lefdef   met5
