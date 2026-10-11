@@ -6,24 +6,25 @@ The flow on `sky130_scl_9T`, a 9-track sky130 cell library, with Cadence tools. 
 
 | Tool | Stages | Assumed version |
 |---|---|---|
-| Xcelium (`xrun`, HAL) | `lint`, `sim` (with cocotb 2.1.0) | 23.09 or newer |
+| Xcelium (`xrun`, HAL) | `lint`, `sim`, `gls` (with cocotb 2.1.0) | 23.09 or newer |
 | Genus | `synth` | 22.1 or newer, Stylus |
 | Innovus | `floorplan` `place` `cts` `grt` `route` `finish` `gds` | 22.1 or newer, Stylus |
 | Quantus (`qrc`) | extraction in `finish` | 22.1 or newer |
 | Tempus | `sta`, sign-off timing in `finish` | 22.1 or newer, Stylus |
 | Voltus | IR drop in `finish` | 22.1 or newer, Stylus |
 | Pegasus | `drc`, `lvs` | 22.1 or newer |
+| Conformal LEC (`lec`) | `lec`, `lec-mutation` | 21.1 or newer |
 
 ## Setup
 
-- Clone `silicon-badgers-sky130-pdk` next to this repo, or set `SB_PDK`. This track uses its `cadence/` folder.
+- Clone the PDK repo next to this repo under that folder name (`git clone <PDK repo URL> silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `cadence/` folder.
 - Load the tools and licenses the way your site does it, for example:
   ```
-  module load xcelium genus innovus quantus tempus voltus pegasus   # names vary per site
-  export CDS_LIC_FILE=<port>@<license server>                       # or LM_LICENSE_FILE
+  module load xcelium genus innovus quantus tempus voltus pegasus conformal   # names vary per site
+  export CDS_LIC_FILE=<port>@<license server>                                 # or LM_LICENSE_FILE
   ```
-  Other command names or a wrapper: `GENUS=`, `INNOVUS=`, `TEMPUS=`, `VOLTUS=`, `PEGASUS=`, `XRUN=` on the `make` line.
-- Python 3.10 with `cocotb==2.1.0` for `make sim`.
+  Other command names or a wrapper: `GENUS=`, `INNOVUS=`, `TEMPUS=`, `VOLTUS=`, `PEGASUS=`, `XRUN=`, `LEC=` on the `make` line.
+- Python 3.10 with `cocotb==2.1.0` for `make sim` and `make gls`.
 - `make info`: every tool found, every PDK file `OK`.
 
 ## Run
@@ -38,24 +39,28 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `synth` | Genus | `netlist.v`, `synth.log`, `synth_*.rpt` |
 | `sta` | Tempus | `sta.rpt`, `sta.json` |
 | `floorplan` `place` `cts` `grt` `route` | Innovus | `<stage>.db`, `.log`, `.rpt`, `.json` (metrics), `reports/<stage>/` |
-| `finish` | Innovus, Quantus, Tempus, Voltus | `finish.db`, `final.v`, `final_lvs.v`, `final_<corner>.spef`, `finish.json`, `finish_sta.rpt`, `ir/` |
+| `finish` | Innovus, Quantus, Tempus, Voltus | `finish.db`, `final.v`, `final_logic.v`, `final_lvs.v`, `final_<corner>.spef`, `finish.json`, `finish_sta.rpt`, `ir/` |
 | `gds` | Innovus | `final.gds` |
 | `drc`, `lvs` | Pegasus | `drc_count.txt`, `drc/`; `lvs.rpt`, `lvs/` |
-| `abstract` | Innovus | `abstract/<top>.{lef,gds,v}`, `abstract/<top>_<corner>.lib`: the design as a macro (`.v`: LVS netlist) |
+| `lec` | Conformal | `lec_synth.log` (RTL vs `netlist.v`), `lec_route.log` (`netlist.v` vs routed `final_logic.v`); `lec_<step>.rpt`: PASS line |
+| `gls` | Xcelium + cocotb | `gls_results.xml`: the RTL testbench on `final_logic.v` with the cell models; `sim_gls/` |
+| `abstract` | Innovus | `abstract/<top>.{lef,gds,v}`, `<top>_lvs.v`, `<top>_<corner>.lib`: the design as a macro (`.v`: routed logic netlist; `_lvs.v`: LVS netlist) |
 | `all` | | every stage above |
+| `lec-mutation` | Conformal | both LEC steps must fail on broken netlists |
 
 Settings in `designs/<design>/design.mk`, or on the `make` line: `CORE_UTILIZATION`, `ASPECT_RATIO`, `CORE_MARGIN`, `PLACE_DENSITY`, `IO_CONSTRAINTS`, `GPL_TIMING_DRIVEN`, `CTS_BUF_LIST`, `CTS_INV_LIST`, `SKIP_CTS_REPAIR_TIMING`, `PDN_STRAP_PITCH`.
-Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `EXTRACT_EFFORT` (`signoff`), `SKIP_IR=1`, `DRC_DENSITY=1`, `NCPU`.
+Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `EXTRACT_EFFORT` (`signoff`), `SKIP_IR=1`, `DRC_DENSITY=1`, `NCPU`, `LEC_SYNTH_MODE` (`genus`: the dofile Genus wrote; `own`: `lec_synth.do`), `GLS_XRUN_ARGS` (`-seq_udp_delay 50ps`).
 
 ## Layout
 
 | Path | |
 |---|---|
 | `flow/Makefile` | stages and their inputs |
-| `flow/platforms/` | platform files from the PDK repo (`sky130_scl_9T.mk`), LEF to Quantus layer names |
+| `flow/platforms/` | platform files from the PDK repo (`sky130_scl_9T.mk`), LEF to Quantus layer names, tie-cell models |
 | `flow/scripts/mmmc.tcl` | corners, libraries and SDC for Genus, Innovus and Tempus |
 | `flow/scripts/pnr/` | one Innovus script per stage, `power.tcl`, `common.tcl` |
 | `flow/scripts/genus/`, `tempus/`, `voltus/`, `pegasus/` | the other tool steps |
+| `flow/scripts/lec/` | Conformal dofiles, result check, mutation check |
 | `designs/<name>/` | `design.mk`, `constraint.sdc`, `hal_waivers.txt` (this track); `rtl/`, `tb/` (shared) |
 
 ## Macros
@@ -64,13 +69,15 @@ Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `E
 - Every stage from `synth` on first runs `make abstract` for each macro (variant `MACRO_VARIANT`, default `base`) in its own make, so knobs on your command line do not reach the macro.
 - Placement: rows of macros from the top of the core, `MACRO_CHANNEL` (default 80 um) apart and from the core edge; `MACRO_HALO` (default 10 um) keeps standard cells out around each macro. With macros, the core is sized from the area of every instance and grown until they fit.
 - The macro's power pins are its met4 straps (its `pdn.tcl`); the met5 straps of the top grid cross the macro and connect to them. The macro routes up to met4 only (`MACRO_TOP_LAYER` in the platform file).
-- The tile reads the macro LEF and timing models in Genus, Innovus and Tempus, merges its GDS, and LVS reads its netlist.
+- The tile reads the macro LEF and timing models in Genus, Innovus and Tempus, merges its GDS, and LVS reads its LVS netlist (`abstract/<macro>_lvs.v`).
+- LEC treats the macro as a black box (check the macro itself with `make lec DESIGN=sb_sram_256x8`); GLS simulates its routed netlist (`abstract/<macro>.v`).
 
 ## Status
 
 - gcd: written, not yet run on Cadence tools. Checked without them: Tcl, shell and Python syntax, and `make all` with stub tools.
 - tile and sb_sram_256x8: written, not yet run on Cadence tools. Checked without them: Tcl syntax, the floorplan and power-grid scripts against mocked commands, and `make` with stub tools (macro first, rebuild scope).
-- Not yet: LEC and GLS.
+- `lec`, `lec-mutation` and `gls`: written, not yet run on Cadence tools. Checked without them: Tcl syntax, the dofiles against mocked Conformal commands, `make` with stub tools, the mutations on Yosys-mapped `sky130_scl_9T` netlists (each mutant not equivalent), and GLS of those netlists with the PDK cell models in Icarus.
+- Not yet: GLS with SDF (wire and cell) delays.
 
 ## Notes
 
@@ -79,6 +86,9 @@ Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `E
 - `grt` is Innovus's early global route (congestion and timing estimate); `route_design` in `route` routes again in full.
 - A metric a script cannot read is `null`; the report next to it has the number.
 - Cadence tools can exit 0 after a script error, so a stage passes only if its log ends with `SB: <name> done`.
+- `final.v` (with the antenna diodes, which the extracted parasitics include) is for Tempus; `final_logic.v` (no fillers, decaps, antenna diodes or power pins) is for LEC and GLS; LVS uses `final_lvs.v`.
+- LEC passes on compare points with none non-equivalent, aborted or unknown (`lec_result.py` reads the `No of ... points` lines). In `lec_route`, key points map by name: Innovus keeps the instance names, so no renaming rules are needed.
+- GLS: the cell models have zero delay; `-seq_udp_delay` gives every flip-flop a clock-to-Q delay, so the clock tree cannot race the data (it also turns off the specify blocks). Do not use `-notimingchecks`: it stops the delayed clock and data nets the flip-flop models need.
 
 ## First run checklist
 
@@ -100,5 +110,11 @@ The scripts were written against the tool documentation. On the first run on a l
 14. `make abstract DESIGN=sb_sram_256x8`: `write_timing_model` (or `do_extract_model`) writes three `.lib`; `write_lef_abstract` (`-stripe_pins`, `-pg_pin_layers`, `-specify_top_layer`) writes the met4 straps as `VDD`/`VSS` pins and no met5; `final_lvs.v` has `VDD`/`VSS` ports. In `final.gds` every signal pin has metal on datatype 20 under its datatype-16 shape.
 15. `make floorplan DESIGN=tile`: the `SB: macro` lines and the GUI show four macros 80 um apart, halos, no rows or met4 straps over them, and met4 to met5 vias on their power pins (`floorplan_pg.rpt` clean). `place_inst`, `create_place_halo -all_blocks`, `create_route_halo`, `cut_rows -area` and `add_stripes -area_blockage` are accepted (no `SB-WARNING`).
 16. `make gds lvs DESIGN=tile`: `gds.log` shows how `-uniquify_cell_names` treats the library cells that are in both the cell GDS and the macro GDS; LVS matches with `sb_sram_256x8` as its own cell. If Voltus stops on the macro in `finish` (no power-grid view), run with `SKIP_IR=1`.
+17. `make synth`: Genus writes `genus_lec.do` (no `SB-WARNING: write_do_lec failed`). It names `netlist.v` by the path make passed (`lec-mutation` replaces that path with the mutant's) and prints the `No of ... points` lines; if not, use `LEC_SYNTH_MODE=own`.
+18. `make finish`: `write_netlist -exclude_leaf_cells -exclude_insts_of_cells` is accepted; `grep -cE '^\s*(FILL|ANTENNA)' build/gcd/base/final_logic.v` is 0, and `final_logic.v` has no `VDD`/`VSS` ports and no `module` of a library cell or macro.
+19. `make lec`: Conformal starts with `LEC_FLAGS="-xl -nogui"`, reads the gzipped Liberty and exits by itself; `lec_synth.log` and `lec_route.log` end with the four `No of ... points` lines and both `lec_*.rpt` say PASS. An `SB-WARNING` in a log names a command this release words otherwise (`add_black_box`, `set_parallel_option`, `report_unmapped_points`, `set_flatten_model`, `analyze_abort`). Run gcd with `LEC_SYNTH_MODE=own` too.
+20. `make lec DESIGN=sb_sram_256x8`, then `DESIGN=tile`: `report_black_box` lists `sb_sram_256x8` on both sides (four instances in the tile), and `lec_route.log` has no unmapped flip-flops. Note the tile's `lec_route` run time (track A needed named match points to make its gate-vs-gate check fast); if it is slow or aborts, compare module by module (`write_hier_compare_dofile`, `run_hier_compare`), since both netlists keep the Genus hierarchy.
+21. `make lec-mutation` for the three designs: `4/4 caught`, logs in `lec_mutation/`.
+22. `make gls DESIGN=gcd`, then `DESIGN=tile`: `xrun` accepts `-seq_udp_delay 50ps` (else set `GLS_XRUN_ARGS`); `sim_gls/xrun_build.log` has no `*E` (a missing module means `final_logic.v` kept a physical cell; a module defined twice means the tile and macro netlists share a Genus module name); 2/2 and 3/3 tests pass.
 
 Back: [README.md](../README.md)

@@ -14,7 +14,7 @@ global_connect
 # write the layout before extraction: extract_parasitics drops the router's min-area patches
 write_db $::env(OUT_DIR)/final.odb
 write_def $::env(OUT_DIR)/final.def
-write_verilog $::env(OUT_DIR)/final.v
+write_verilog -remove_cells [sb_physical_only_masters] $::env(OUT_DIR)/final.v   ;# logic only, for LEC and GLS
 write_cdl -masters [concat $::env(CDL_FILE) [env_or MACRO_CDL ""]] $::env(OUT_DIR)/final.cdl   ;# netlist for LVS
 
 # extracted wire RC replaces the estimates

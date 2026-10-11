@@ -1,7 +1,7 @@
 # File:        synth.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: Genus synthesis: RTL to a netlist of sky130_scl_9T cells timed at the setup corner, with tie cells and reports. Inputs are environment variables from synth.env, written by make.
+# Date:        2026-10-11
+# Description: Genus synthesis: RTL to a netlist of sky130_scl_9T cells timed at the setup corner, with tie cells, reports and a Conformal dofile. Inputs are environment variables from synth.env, written by make.
 source $::env(SCRIPTS)/util/sb_util.tcl
 
 set top    $::env(TOP)
@@ -61,9 +61,15 @@ report_gates                 > $out/synth_gates.rpt
 report_qor                   > $out/synth_qor.rpt
 sb_try report_power          > $out/synth_power.rpt
 
-# --- 7. netlist, and the constraints as Genus applied them ---
+# --- 7. netlist, the constraints as Genus applied them, and the Conformal dofile for make lec (RTL vs this netlist) ---
 write_hdl > $out/netlist.v
 sb_try write_sdc -view view_[lindex [env_or SETUP_CORNERS ss] 0] > $out/netlist.sdc
+# Genus knows how it renamed registers and built datapaths; without this file make lec uses flow/scripts/lec/lec_synth.do
+file delete $out/genus_lec.do
+if {[catch {write_do_lec -golden_design rtl -revised_design $out/netlist.v -logfile $out/logs/lec_synth.log > $out/genus_lec.do} msg]} {
+    file delete $out/genus_lec.do
+    puts "SB-WARNING: write_do_lec failed: $msg"
+}
 
 sb_done synth
 exit

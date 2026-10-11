@@ -1,7 +1,7 @@
 # File:        finish.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: Fill cells, Quantus extraction and the final outputs: finish.db, final.v (timing), final_lvs.v (LVS), final.def and one SPEF per corner.
+# Date:        2026-10-11
+# Description: Fill cells, Quantus extraction and the final outputs: finish.db, final.v (timing), final_logic.v (LEC, GLS), final_lvs.v (LVS), final.def and one SPEF per corner.
 #              make then runs Tempus (sign-off timing) and Voltus (IR drop) on them.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_open route
@@ -25,8 +25,10 @@ foreach c {ss tt ff} {
     write_parasitics -spef_file $out/final_$c.spef -rc_corner rc_$c
 }
 
-# netlists: for timing (with the clock tree), and for LVS (power pins and physical cells, no plain fillers)
+# netlists: for timing (with the clock tree), logic only for LEC and GLS (no physical-only cells, power pins or cell definitions),
+# and for LVS (power pins and physical cells, no plain fillers)
 write_netlist $out/final.v
+write_netlist $out/final_logic.v -exclude_leaf_cells -exclude_insts_of_cells $::env(PHYSICAL_CELLS)
 write_netlist $out/final_lvs.v -top_module_first -top_module $::env(TOP) \
     -exclude_leaf_cells -phys -flat -exclude_insts_of_cells $::env(FILL_CELLS)
 sb_try write_def $out/final.def

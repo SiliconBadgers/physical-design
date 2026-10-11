@@ -1,6 +1,6 @@
 # File:        common.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-08
+# Date:        2026-10-09
 # Description: Shared procs for the place-and-route scripts: load a stage database and report a stage.
 
 proc env_or {name default} {
@@ -17,6 +17,20 @@ proc sb_setup {} {
 
 proc sb_read_libs {} {
   foreach lib [concat $::env(LIBS) [env_or MACRO_LIBS ""]] { read_liberty $lib }
+}
+
+# masters with no logic (well taps, antenna diodes, end caps, fillers), left out of the logic netlist as ORFS does
+proc sb_physical_only_masters {} {
+  set names {}
+  foreach lib [[ord::get_db] getLibs] {
+    foreach m [$lib getMasters] {
+      set sig 0
+      foreach t [$m getMTerms] { if {[$t getSigType] ni {POWER GROUND}} { set sig 1 } }
+      if {[regexp {^(CORE_(WELLTAP|ANTENNACELL|SPACER|FEEDTHROUGH)|ENDCAP|COVER|RING|PAD_SPACER)} [$m getType]]
+          || (!$sig && [get_lib_cells -quiet */[$m getName]] eq "")} { lappend names [$m getName] }
+    }
+  }
+  return $names
 }
 
 # load the database a previous stage wrote

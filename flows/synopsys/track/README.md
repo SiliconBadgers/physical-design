@@ -7,22 +7,23 @@ The flow on sky130hd with Synopsys tools, and KLayout for DRC and LVS. Same stag
 | Tool | Command | Used for |
 |---|---|---|
 | VC SpyGlass (optional), else VCS | `vc_static_shell`, `vcs +lint=all` | `lint` |
-| VCS with cocotb | `vcs` | `sim` |
+| VCS with cocotb | `vcs` | `sim`, `gls` |
 | Design Compiler | `dc_shell` | `synth` |
 | PrimeTime | `pt_shell` | `sta`, and sign-off timing in `finish` |
+| Formality | `fm_shell` | `lec`, `lec-mutation` |
 | IC Compiler II | `icc2_shell` | `floorplan` to `finish`, `gds` |
 | StarRC | `StarXtract` | extraction in `finish` |
 | KLayout | `klayout` | `drc`, `lvs` with the open sky130hd decks (no IC Validator decks exist for sky130) |
 | Library Compiler, IC Compiler II Library Manager, `grdgenxo` | `lc_shell`, `icc2_lm_shell`, `grdgenxo` | `make_views.sh` (once); `lc_shell` and `icc2_lm_shell` also in `abstract` |
 
-Assumed versions: the V-2023.12 releases or newer of Design Compiler, PrimeTime, IC Compiler II, StarRC and VCS (app-option names change between releases; see the checklist). KLayout 0.30.12, cocotb 2.1.0 and Python 3.9 or newer, as Track A.
+Assumed versions: the V-2023.12 releases or newer of Design Compiler, PrimeTime, IC Compiler II, StarRC, Formality and VCS (app-option names change between releases; see the checklist). KLayout 0.30.12, cocotb 2.1.0 and Python 3.9 or newer, as Track A.
 
 ## Setup
 
-- Load the Synopsys tools the way your site does it, then check: `which dc_shell pt_shell icc2_shell StarXtract vcs klayout`.
-- Clone `silicon-badgers-sky130-pdk` next to this repo, or set `SB_PDK`. This track uses its `synopsys/` folder, and the DRC and LVS decks in `open/sky130hd/`.
+- Load the Synopsys tools the way your site does it, then check: `which dc_shell pt_shell icc2_shell StarXtract fm_shell vcs klayout`.
+- Clone the PDK repo next to this repo under that folder name (`git clone <PDK repo URL> silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `synopsys/` folder, the DRC and LVS decks in `open/sky130hd/` and the cell simulation models in `open/verilog/`.
 - Build the Synopsys views once per PDK checkout: `$SB_PDK/synopsys/make_views.sh`. It writes `synopsys/views/`: three `.db` files (ss, tt, ff), the `.tluplus` and `.nxtgrd` RC tables and `sky130_fd_sc_hd.ndm`. Without them `make synth` and later stages stop with this instruction. `make info` shows whether they are there.
-- `pip install cocotb==2.1.0` for `make sim`.
+- `pip install cocotb==2.1.0` for `make sim` and `make gls`.
 
 ## Run
 
@@ -36,13 +37,19 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `synth` | Design Compiler, at the first setup corner | `netlist.v`, `synth.log`, `synth_*.rpt` |
 | `sta` | PrimeTime, at each setup and hold corner | `sta_<corner>.rpt`, `.json` |
 | `floorplan` `place` `cts` `grt` `route` | IC Compiler II | checkpoint `icc2/<stage>/<top>.nlib`, `<stage>.log`, `.rpt`, `.json` (metrics) |
-| `finish` | IC Compiler II, StarRC, PrimeTime | `final.v`, `final_lvs.v`, `final.def`, `final.spef`, `signoff_<corner>.rpt`, `finish.json` |
+| `finish` | IC Compiler II, StarRC, PrimeTime | `final.v`, `final_logic.v`, `final_lvs.v`, `final.def`, `final.spef`, `signoff_<corner>.rpt`, `finish.json` |
 | `gds`, `drc`, `lvs` | IC Compiler II, KLayout | `final.gds`, `drc.lyrdb`, `lvs.lvsdb` |
-| `abstract` | IC Compiler II, PrimeTime, Library Compiler, KLayout | `abstract/<top>.{lef,lib,gds,cdl}`, `<top>_<corner>.db`, `<top>.ndm`: the design as a macro |
+| `lec` | Formality | `lec_synth.log` (RTL vs `netlist.v`, with `synth.svf`), `lec_route.log` (`netlist.v` vs `final_logic.v`), `lec_<step>_{unmatched,blackboxes,failing}.rpt` |
+| `gls` | VCS and cocotb | `gls_results.xml`: the RTL testbench on `final_logic.v` with the cell models |
+| `abstract` | IC Compiler II, PrimeTime, Library Compiler, KLayout | `abstract/<top>.{lef,lib,gds,cdl,v}`, `<top>_<corner>.db`, `<top>.ndm`: the design as a macro |
 | `all` | | every stage above (not `abstract`) |
+| `lec-mutation` | Formality | both LEC steps must fail on broken netlists (`lec_mutation/`) |
 
 - Sign-off corners: `tt` for setup and hold by default (`SETUP_CORNERS=tt`, `HOLD_CORNERS=tt`), like track A, so the metrics compare. IC Compiler II fixes setup and hold in those scenarios.
 - `finish.json` gets its timing from PrimeTime with the StarRC parasitics (worst over the corners); area and utilization come from IC Compiler II. A value a script could not read is `null`.
+- `final_logic.v` is `final.v` (the PrimeTime netlist) without antenna diodes: the logic netlist for LEC and GLS. LVS uses `final_lvs.v`.
+- `lec_route` uses no SVF: IC Compiler II keeps the flip-flop, port and macro instance names of `netlist.v`, and Formality pairs those by name; the buffers, resized cells, swapped pins and tie cells from place and route sit inside the logic cones between them.
+- GLS uses the SkyWater models with `FUNCTIONAL` and `UNIT_DELAY=#1` (a 1 ns flip-flop delay, no other cell delays).
 - Each stage copies the previous checkpoint before changing it, so any stage can be reopened: `icc2_shell`, then `open_lib build/gcd/base/icc2/cts/gcd.nlib; open_block gcd`.
 
 | Variable | Default | |
@@ -56,6 +63,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `DC_COMPILE` `SYNTH_FLATTEN` `SYNTH_RETIME` | `compile_ultra` `1` `0` | synthesis |
 | `GDS_TOOL` | `icc2` | `klayout` merges `final.def` with the cell GDS instead of `write_gds` |
 | `LINT_TOOL`, `CORES` | `auto`, `4` | `vc` or `vcs`; CPU cores per tool |
+| `GLS_VCS_ARGS` | none | extra VCS compile options for `gls` |
 | `MACRO_HALO`, `MACRO_CHANNEL` | `10`, `80` | um: standard-cell keep-out around each macro; space between macros and to the core edge |
 | `MACRO_VARIANT` | `base` | variant of the macros' builds |
 
@@ -65,7 +73,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 |---|---|
 | `flow/Makefile` | stages and their inputs |
 | `flow/platforms/sky130hd.mk` | PDK files, corners and cells |
-| `flow/scripts/` | one folder per tool: `dc`, `pt`, `icc2`, `starrc`, `lc`, `klayout`, `lint`, `sim`; `util/` has the shell wrapper and metrics procs |
+| `flow/scripts/` | one folder per tool: `dc`, `pt`, `icc2`, `starrc`, `lc`, `fm`, `klayout`, `lint`, `sim`; `util/` has the shell wrapper and metrics procs |
 | `designs/<name>/` | `design.mk`, `constraint.sdc` (this track); `rtl/`, `tb/` (shared) |
 
 ## Macros
@@ -76,6 +84,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 - Placement (`macro_place.tcl`): rows from the top-left of the core, `MACRO_CHANNEL` apart and from the core edge, on the met2/met4 and met3/met5 track grid; a hard keep-out margin of `MACRO_HALO`.
 - The macro routes up to met4 (`MAX_ROUTING_LAYER` in its `design.mk`); its met4 straps are its power pins. The parent's met1 rails and met4 straps stop at the macro, its met5 straps cross it and connect to those pins.
 - Every `final.gds` gets drawing metal under its top-level pin shapes (`pin_metal.py`), so a wire that ends at a macro pin connects.
+- LEC treats the macro as a black box (its `.db` has no logic; check the macro itself with `make lec DESIGN=sb_sram_256x8`); GLS simulates its routed netlist (`abstract/<macro>.v`).
 
 ## Status
 
@@ -83,7 +92,8 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 - Checked without them: Tcl, shell and Python syntax; `make all DESIGN=gcd` with stub tools (every stage, reruns, variants, a failing stage); the KLayout steps for real on Track A's gcd layout (0 DRC violations, LVS match through `v2cdl.py`, also with `GDS_TOOL=klayout`).
 - The 6 ns clock comes from Track A, which signs off at tt. Track A's routed gcd timed at ss with the same Liberty files has −3.2 ns setup slack, so expect negative setup slack in a full-signoff variant (`SETUP_CORNERS=ss HOLD_CORNERS=ff`) until the clock is recalibrated.
 - The tile (`DESIGN=tile`, four `sb_sram_256x8` macros): written, not yet run on Synopsys tools. Checked with stub tools (macro build first, reruns, knob isolation); the KLayout steps for real on Track A's tile and block layouts (LVS match with the macro; without `pin_metal.py` the macro does not match).
-- Not yet: LEC, IR drop (needs a rail analysis tool and rail views of the cells).
+- LEC and GLS: written, not yet run on Synopsys tools. Checked with stub tools on gcd, `sb_sram_256x8` and the tile (`lec`, `lec-mutation`, `gls`, `all`, reruns, failing LEC); GLS for real through cocotb's VCS runner with Icarus standing in for `vcs`, on Track A's routed netlists (gcd 2/2, tile 3/3 with the macro's routed netlist); the mutations on Track A's netlists, also respelled as Design Compiler and IC Compiler II write them.
+- Not yet: IR drop (needs a rail analysis tool and rail views of the cells).
 
 ## First run checklist
 
@@ -96,12 +106,17 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 7. `floorplan.json` core area and utilization match `report_utilization` in `floorplan.rpt` (`get_core_area` boundary; instance area counts tap cells, not fillers, as OpenROAD does).
 8. `cts.json` skew is not `null` and is close to `report_clock_qor` in `cts.rpt` (timing-path attributes `startpoint_clock_latency`, `endpoint_clock_latency`).
 9. `make route`: `route_track` starts from the global route saved by `grt`; `route_drc.rpt` has the `Total Wire Length`, `Total Number of Contacts` and `Total number of DRCs` lines that `route.json` reads (else fix the patterns in `sb_route_metrics`); `route.log` has no `antenna rules not loaded` line.
-10. `make finish`: `final_lvs.v` has power pins and the tap and filler cells, `final.v` has neither; `extract.log` maps every LEF layer; `signoff_ss.rpt` shows every net annotated.
+10. `make finish`: `final_lvs.v` has power pins and the tap and filler cells, `final.v` has neither; `final_logic.v` also has no `diode_2` cells and `finish.log` has no `final_logic.v keeps the antenna diodes` warning (`write_verilog -exclude diode_cells`); `extract.log` maps every LEF layer; `signoff_ss.rpt` shows every net annotated.
 11. `make gds`: `write_gds` accepts the layer map, and the GDS has pin labels on datatype 5 (met1 = 68/5), which KLayout LVS reads. If LVS fails on pins, run `make lvs GDS_TOOL=klayout` to tell a layer-map problem from a netlist problem.
 12. `make drc lvs`: 0 violations, netlists match.
 13. Compare `build/gcd/<variant>/*.json` with Track A, then recalibrate the clock at ss and update `constraint.sdc` and this page.
 14. `make abstract DESIGN=sb_sram_256x8`: `floorplan.log` has no `create_terminal` error and `abstract.log` passes the LEF check (VDD and VSS pins on met4); `abstract/<top>_<corner>.lib` has bus pins and the cell `sb_sram_256x8`; `abstract_ndm.log` has no `check_workspace` errors (the LEF and `.db` pins agree).
 15. `make floorplan DESIGN=tile`: the macros link from the `.ndm`; `floorplan.rpt` shows no floating macro power pins (`check_pg_connectivity`), met4 straps and rails stop at the macros and met5 crosses them; `macro_place.tcl` placed four macros.
 16. `make lvs DESIGN=tile`: `write_gds` merges the macro GDS; netlists match. If not, try `GDS_TOOL=klayout` on the macro (`make abstract DESIGN=sb_sram_256x8 GDS_TOOL=klayout`) and on the tile.
+17. `make lec`: `fm_shell` runs `util/run.tcl` (`source -echo`) and exits by itself; `read_sverilog -r -vcs "+incdir+..."` reads the RTL; the `SB: lec_<step>: PASS` line agrees with `Verification SUCCEEDED` in the log (`lec.tcl` takes a `verify` return value of 1 as a pass, and 0 from a read or `set_top` as a failure).
+18. `lec_<step>_unmatched.rpt` lists no flip-flops or ports. If `lec_route` has unmatched flip-flops, IC Compiler II renamed or merged them: give `lec_route` an SVF from IC Compiler II.
+19. `make lec DESIGN=tile`: `lec_synth_blackboxes.rpt` and `lec_route_blackboxes.rpt` list the four `sb_sram_256x8` instances and nothing else (the macro `.db` from `extract_model` has no function); `make lec DESIGN=sb_sram_256x8` passes; `runtimes.txt` shows how long `lec_route` takes on the tile.
+20. `make lec-mutation` on gcd, `sb_sram_256x8` and the tile: 4/4 caught. The script finds instances in the Design Compiler and IC Compiler II spellings (`.A(n1)` and `.A ( n1 )`) and looks for `Verification FAILED` at the start of a line; a `no nand2 cell` or `fewer than two flip-flops` stop means the netlist is spelled another way.
+21. `make gls`: VCS compiles the cell models with `-sverilog` (always set by cocotb's VCS runner), `+define+FUNCTIONAL +define+UNIT_DELAY=#1` and `-timescale=1ns/1ps`, and passes gcd 2/2 and the tile 3/3. If VCS stops in `primitives.v` or `sky130_fd_sc_hd.v`, try options through `GLS_VCS_ARGS` (not tried: `+verilog2001ext+.v` to read `.v` files as Verilog-2001, `-override_timescale=1ns/1ps`).
 
 Back: [README.md](../README.md)

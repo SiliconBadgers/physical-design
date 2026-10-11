@@ -1,6 +1,6 @@
 # File:        sky130_scl_9T.mk
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: sky130_scl_9T platform settings. All files come from the cadence/ folder of the SiliconBadgers sky130 PDK repo.
 
 # SiliconBadgers sky130 PDK repo
@@ -39,6 +39,8 @@ SITE        := CoreSite
 FILL_CELLS  := FILL64 FILL32 FILL16 FILL8 FILL4 FILL2 FILL1
 # fillers with a decoupling capacitor (they have devices, so LVS sees them)
 DECAP_CELLS := FILL_DECAP16 FILL_DECAP8
+# cells with no logic (fillers, decaps, antenna diode): left out of final_logic.v, the logic netlist
+PHYSICAL_CELLS := $(FILL_CELLS) $(DECAP_CELLS) ANTENNA
 MIN_ROUTING_LAYER     := met1
 MAX_ROUTING_LAYER     := met5
 # clock nets route on these layers
@@ -52,6 +54,10 @@ MACRO_GRID      := 4.14
 PWR_NET := VDD
 GND_NET := VSS
 VDD_V   := 1.8
+
+# --- gate-level simulation ---
+# cell models (zero delay, no defines needed), and the tie cells, which have no model in the PDK
+CELL_VERILOG := $(SCL)/verilog/sky130_scl_9T.v $(FLOW)/platforms/sky130_scl_9T_tiecells.v
 
 # --- signoff (Pegasus decks) ---
 DRC_DECK := $(PLATFORM_DIR)/tech/pegasus/drc/sky130_rev_0.0_2.12.drc.pvl

@@ -36,6 +36,12 @@ ABC_SUBMODULE_DELAY_FRAC ?= 1.0
 ABC_SCRIPT    ?=
 RTL_FRONTEND  ?= slang
 WAVES         ?= 0
+# gate-level simulator: icarus (4-state) or verilator (2-state)
+GLS_SIM       ?= icarus
+# parallel LEC proofs; eqy runs the Yosys installed next to it (its plugin is built for that one)
+LEC_JOBS      ?= $(shell nproc 2>/dev/null || echo 4)
+EQY           ?= eqy
+EQY_YOSYS     ?= $(or $(wildcard $(dir $(shell command -v $(EQY)))yosys),yosys)
 
 PLATFORM_MK := $(FLOW)/platforms/sky130hd.mk
 include $(PLATFORM_MK)
@@ -78,7 +84,9 @@ MACRO_LEFS    += $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
 MACRO_LIBS    += $(foreach m,$(MACROS),$(call macro_abs,$(m)).lib)
 MACRO_GDS     += $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
 MACRO_CDL     += $(foreach m,$(MACROS),$(call macro_abs,$(m)).cdl)
-MACRO_FILES   := $(foreach m,$(MACROS),$(addprefix $(call macro_abs,$(m)),.lef .lib .gds .cdl))
+# routed netlists of the macros, for gate-level simulation
+MACRO_NETLISTS := $(foreach m,$(MACROS),$(call macro_abs,$(m)).v)
+MACRO_FILES   := $(foreach m,$(MACROS),$(addprefix $(call macro_abs,$(m)),.lef .lib .gds .cdl .v))
 # keep-out ring for standard cells around each macro, and minimum channel between macros and the core edge (um)
 MACRO_HALO    ?= 10
 MACRO_CHANNEL ?= 80
@@ -100,15 +108,16 @@ FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
 OR_RUN    := $(OPENROAD) -no_init -no_splash -exit
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs abstract macros compare clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros compare clean FORCE
 # stages run in order (macros are built before synthesis)
 .NOTPARALLEL:
 FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
-	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | abstract | all | compare | clean | info"
+	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls | abstract | all | compare | clean | info"
 	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
 	@echo "  compare: run ORFS on the same netlist and SDC and print both flows' numbers per stage"
+	@echo "  lec-mutation: LEC must fail on broken netlists"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
 
 info:
@@ -119,7 +128,7 @@ info:
 print-%:
 	@echo '$($*)'
 
-all: lint sim synth sta floorplan place cts grt route finish gds drc lvs
+all: lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls
 
 lint:      $(BUILD)/lint.log
 sim:       $(if $(TB_MODULE),$(BUILD)/results.xml)
@@ -134,6 +143,8 @@ finish:    macros $(BUILD)/final.odb
 gds:       macros $(BUILD)/final.gds
 drc:       macros $(BUILD)/drc_count.txt
 lvs:       macros $(BUILD)/lvs.lvsdb
+lec:       macros $(BUILD)/lec_synth.log $(BUILD)/lec_route.log
+gls:       macros $(if $(TB_MODULE),$(BUILD)/gls_results.xml)
 abstract:  $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
 
 # build each macro's abstract in its own make: only the PDK and tool paths pass on, not other command-line settings
@@ -281,11 +292,12 @@ $(BUILD)/route.odb: $(BUILD)/grt.odb $(PNR_DEPS) $(SCRIPTS)/pnr/route.tcl
 $(BUILD)/final.odb: $(BUILD)/route.odb $(PNR_DEPS) $(SCRIPTS)/pnr/finish.tcl
 	$(call pnr_stage,finish)
 
-# abstract of this design for use as a macro: LEF, timing model (tt) and netlist; GDS copied on its own
+# abstract of this design for use as a macro: LEF, timing model (tt), LVS and gate netlists; GDS copied on its own
 $(BUILD)/abstract/$(TOP).lef: $(BUILD)/final.odb $(SCRIPTS)/pnr/abstract.tcl
 	mkdir -p $(BUILD)/abstract
 	$(call pnr_stage,abstract)
 	cp $(BUILD)/final.cdl $(BUILD)/abstract/$(TOP).cdl
+	cp $(BUILD)/final.v $(BUILD)/abstract/$(TOP).v
 $(BUILD)/abstract/$(TOP).gds: $(BUILD)/final.gds
 	mkdir -p $(@D)
 	cp $< $@
@@ -307,6 +319,33 @@ $(BUILD)/lvs.lvsdb: $(BUILD)/final.gds $(CDL_FILE) $(MACRO_CDL)
 	cd $(BUILD) && $(TIMED) lvs $(KLAYOUT) -b -rd in_gds=final.gds -rd cdl_file=$(BUILD)/final_concat.cdl \
 	  -rd top_cell=$(TOP) -rd report_file=$(BUILD)/lvs.lvsdb -r $(LVS_DECK) > lvs.log 2>&1 || { tail -5 lvs.log; exit 1; }
 	@grep -q 'Netlists match' $(BUILD)/lvs.log && echo "LVS: netlists match" || { echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
+
+# --- lec (eqy): RTL vs synthesized netlist, then synthesized vs routed netlist; macros are black boxes ---
+$(BUILD)/lec_synth.eqy: $(SCRIPTS)/lec/eqy.template $(SCRIPTS)/lec/make_eqy.py $(BUILD)/netlist.v $(SYNTH_RTL) $(FLOW_DEPS)
+	python3 $(SCRIPTS)/lec/make_eqy.py --template $< --out $@ --top $(TOP) \
+	  --yosys $(EQY_YOSYS) --frontend $(RTL_FRONTEND) --netlist $(BUILD)/netlist.v --cell-libs $(LIB_tt) --macro-libs $(MACRO_LIBS) \
+	  $(if $(filter 1,$(SLANG_HIERARCHY)),--slang-hierarchy) --adder $(SYNTH_ADDER) \
+	  --incdirs $(RTL_INCDIRS) --defines $(RTL_DEFINES) $(SYNTH_DEFINES) --params $(DESIGN_PARAMS) \
+	  --rtl $(SYNTH_RTL)
+$(BUILD)/lec_route.eqy: $(SCRIPTS)/lec/eqy_route.template $(BUILD)/netlist.v $(BUILD)/final.odb $(MACRO_LIBS) $(FLOW_DEPS)
+	sed -e 's|@TOP@|$(TOP)|g' -e 's|@GOLD@|$(BUILD)/netlist.v|' -e 's|@GATE@|$(BUILD)/final.v|' \
+	  -e 's|@LIBS@|read_liberty -ignore_miss_func $(LIB_tt)$(foreach l,$(MACRO_LIBS),\nread_liberty -lib $(l))|' $< > $@
+$(BUILD)/lec_%.log: $(BUILD)/lec_%.eqy
+	cd $(BUILD) && rm -rf lec_$* && $(TIMED) lec_$* $(EQY) --yosys $(EQY_YOSYS) -j $(LEC_JOBS) -f -d lec_$* lec_$*.eqy > lec_$*_run.log 2>&1 || \
+	  { grep -E 'Failed to prove|DONE' lec_$*_run.log; echo "LEC FAILED -- read $(BUILD)/lec_$*_run.log"; exit 1; }
+	@cp $(BUILD)/lec_$*_run.log $@
+	@echo "LEC $*: $$(grep -E 'DONE' $@ | tail -1)"
+
+# LEC must still fail on a broken gate netlist (two mutants for each LEC step)
+lec-mutation: macros $(BUILD)/lec_synth.eqy $(BUILD)/lec_route.eqy
+	python3 $(SCRIPTS)/lec/lec_mutation.py --work $(BUILD)/lec_mutation --cmd "$(EQY) --yosys $(EQY_YOSYS) -j $(LEC_JOBS)" \
+	  --check $(BUILD)/lec_synth.eqy $(BUILD)/netlist.v --check $(BUILD)/lec_route.eqy $(BUILD)/final.v
+
+# --- gls: the RTL testbench on the routed netlist (cell models; macros as their routed netlists) ---
+$(BUILD)/gls_results.xml: $(BUILD)/final.odb $(CELL_VERILOG) $(MACRO_NETLISTS) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) \
+                          $(SCRIPTS)/gls/run_gls.sh | $(BUILD)
+	GLS_SIM=$(GLS_SIM) $(TIMED) gls $(SCRIPTS)/gls/run_gls.sh $(BUILD) $(BUILD)/final.v $(TOP) $(TB_MODULE) $(TB_DIR) \
+	  $(WAVES) "$(GLS_DEFINES)" $(CELL_VERILOG) $(MACRO_NETLISTS) $(TB_SOURCES)
 
 # --- compare with ORFS on the same netlist and SDC ---
 compare: $(BUILD)/final.odb

@@ -1,8 +1,8 @@
 # File:        abstract.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: Abstract views of a finished design for use as a hard macro: LEF with its power straps as pins, and a Liberty timing model per corner.
-#              Writes abstract/<top>.lef and abstract/<top>_<corner>.lib; make copies the GDS and the LVS netlist next to them.
+#              Writes abstract/<top>.lef and abstract/<top>_<corner>.lib; make copies the GDS, the logic netlist and the LVS netlist next to them.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_open finish
 set top   $::env(TOP)

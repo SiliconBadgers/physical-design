@@ -1,7 +1,7 @@
 # File:        sky130hd.mk
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: sky130hd platform settings for the Synopsys tools. Cell views come from the SiliconBadgers sky130 PDK repo (synopsys/, with views/ built by make_views.sh); DRC and LVS decks from its open/sky130hd/.
+# Date:        2026-10-11
+# Description: sky130hd platform settings for the Synopsys tools. Cell views come from the SiliconBadgers sky130 PDK repo (synopsys/, with views/ built by make_views.sh); DRC and LVS decks from its open/sky130hd/, cell simulation models from open/verilog/.
 
 # SiliconBadgers sky130 PDK repo
 SB_PDK   ?= $(abspath $(SB_ROOT)/../silicon-badgers-sky130-pdk)
@@ -38,6 +38,9 @@ GDS_MAP   := $(TECH)/skywater130_fd_sc_hd.map
 TECH_LEF  := $(CELLS)/lef/$(LIBRARY).tlef
 CELL_LEF  := $(CELLS)/lef/$(LIBRARY).lef
 CELL_GDS  := $(CELLS)/gds/$(LIBRARY).gds
+# cell simulation models and their defines for gate-level simulation
+CELL_VERILOG := $(SB_PDK)/open/verilog/primitives.v $(SB_PDK)/open/verilog/$(LIBRARY).v
+GLS_DEFINES  := FUNCTIONAL UNIT_DELAY=\#1
 
 # --- synthesis ---
 # cells synthesis must not use: power-gating, probe, clock and delay cells

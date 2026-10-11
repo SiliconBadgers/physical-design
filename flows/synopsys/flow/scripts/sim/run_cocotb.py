@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # File:        run_cocotb.py
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: Builds and runs a cocotb testbench with Synopsys VCS. Used by make sim.
+# Date:        2026-10-11
+# Description: Builds and runs a cocotb testbench with Synopsys VCS. Used by make sim (RTL) and make gls (routed netlist).
 
 import argparse
 import sys

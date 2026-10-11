@@ -1,7 +1,7 @@
 # File:        Makefile
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: SiliconBadgers RTL-to-GDS flow on sky130_scl_9T with Cadence tools: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs, abstract. Run `make help` for usage.
+# Date:        2026-10-11
+# Description: SiliconBadgers RTL-to-GDS flow on sky130_scl_9T with Cadence tools: lint, sim, synth, sta, floorplan, place, cts, grt, route, finish, gds, drc, lvs, lec, gls, abstract. Run `make help` for usage.
 
 SHELL       := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -21,10 +21,12 @@ INNOVUS  ?= innovus
 TEMPUS   ?= tempus
 VOLTUS   ?= voltus
 PEGASUS  ?= pegasus
+LEC      ?= lec
 GENUS_FLAGS   ?= -no_gui
 INNOVUS_FLAGS ?= -stylus -nowin
 TEMPUS_FLAGS  ?= -stylus -no_gui
 VOLTUS_FLAGS  ?= -stylus -no_gui
+LEC_FLAGS     ?= -xl -nogui
 # CPU cores per tool
 NCPU     ?= 4
 
@@ -32,6 +34,10 @@ NCPU     ?= 4
 # Genus effort for syn_generic, syn_map and syn_opt: low, medium or high
 SYNTH_EFFORT ?= medium
 WAVES        ?= 0
+# Conformal RTL vs netlist: genus = the dofile Genus wrote (genus_lec.do), own = flow/scripts/lec/lec_synth.do
+LEC_SYNTH_MODE ?= genus
+# xrun options for gls: the cell models have zero delay, so each flip-flop gets a clock-to-Q delay (no race with the clock tree's delta cycles)
+GLS_XRUN_ARGS  ?= -seq_udp_delay 50ps
 
 PLATFORM_MK := $(FLOW)/platforms/sky130_scl_9T.mk
 include $(PLATFORM_MK)
@@ -82,9 +88,10 @@ macro_libs     = $(foreach m,$(MACROS),$(call macro_abs,$(m))_$(1).lib)
 MACRO_LIBS    := $(foreach c,$(CORNERS),$(call macro_libs,$(c)))
 MACRO_LEFS    := $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
 MACRO_GDS     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
-# netlists for LVS
-MACRO_LVS     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).v)
-MACRO_FILES   := $(MACRO_LEFS) $(MACRO_LIBS) $(MACRO_GDS) $(MACRO_LVS)
+# netlists for LVS, and routed logic netlists for gate-level simulation
+MACRO_LVS     := $(foreach m,$(MACROS),$(call macro_abs,$(m))_lvs.v)
+MACRO_NETLISTS := $(foreach m,$(MACROS),$(call macro_abs,$(m)).v)
+MACRO_FILES   := $(MACRO_LEFS) $(MACRO_LIBS) $(MACRO_GDS) $(MACRO_LVS) $(MACRO_NETLISTS)
 # placement keep-out for standard cells around each macro, and minimum channel between macros and to the core edge (um)
 MACRO_HALO    ?= 10
 MACRO_CHANNEL ?= 80
@@ -101,15 +108,16 @@ PGV     := $(PGV_DIR)/techonly.cl
 FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs abstract macros clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean FORCE
 # stages run in order (macros are built before synthesis)
 .NOTPARALLEL:
 FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
-	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs | abstract | all | clean | info"
+	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls | abstract | all | clean | info"
 	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
 	@echo "  info:    settings, tools found on PATH, PDK files present"
+	@echo "  lec-mutation: LEC must fail on broken netlists"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
 
 info:
@@ -117,15 +125,15 @@ info:
 	@echo "PDK=$(PLATFORM_DIR)"
 	@echo "BUILD=$(BUILD)"
 	@echo "setup corners: $(SETUP_CORNERS)  hold corners: $(HOLD_CORNERS)"
-	@for t in $(foreach v,XRUN GENUS INNOVUS TEMPUS VOLTUS PEGASUS,$(firstword $($(v)))) qrc python3; do \
+	@for t in $(foreach v,XRUN GENUS INNOVUS TEMPUS VOLTUS PEGASUS LEC,$(firstword $($(v)))) qrc python3; do \
 	  printf '%-8s ' $$t; command -v $$t || echo MISSING; done
 	@for f in $(LIB_ss) $(LIB_tt) $(LIB_ff) $(LIB_EXTRA) $(TECH_LEF) $(CELL_LEF) $(CELL_GDS) $(CELL_CDL) \
-	  $(STREAM_MAP) $(QRC_TECH) $(DRC_DECK) $(LVS_DECK); do test -e $$f && echo "OK      $$f" || echo "MISSING $$f"; done
+	  $(STREAM_MAP) $(QRC_TECH) $(DRC_DECK) $(LVS_DECK) $(CELL_VERILOG); do test -e $$f && echo "OK      $$f" || echo "MISSING $$f"; done
 
 print-%:
 	@echo '$($*)'
 
-all: lint sim synth sta floorplan place cts grt route finish gds drc lvs
+all: lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls
 
 lint:      $(BUILD)/lint.log
 sim:       $(if $(TB_MODULE),$(BUILD)/results.xml)
@@ -140,6 +148,8 @@ finish:    macros $(BUILD)/finish.json
 gds:       macros $(BUILD)/final.gds
 drc:       macros $(BUILD)/drc_count.txt
 lvs:       macros $(BUILD)/lvs.rpt
+lec:       macros $(BUILD)/lec_synth.rpt $(BUILD)/lec_route.rpt
+gls:       macros $(if $(TB_MODULE),$(BUILD)/gls_results.xml)
 abstract:  macros $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
 
 # build each macro's abstract in its own make: no command-line settings (make exports them too) except the tools, PDK, NCPU and -n
@@ -210,7 +220,14 @@ $(BUILD)/pnr.env: FORCE | $(BUILD)
 	  echo "export SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)' EXTRACT_EFFORT='$(EXTRACT_EFFORT)'"; \
 	  echo "export STREAM_MAP='$(STREAM_MAP)' CELL_GDS='$(CELL_GDS)' PGV_DIR='$(PGV_DIR)'"; \
 	  echo "export PDN_TCL='$(PDN_TCL)' MACROS='$(MACROS)' MACRO_GDS='$(MACRO_GDS)' MACRO_TOP_LAYER='$(MACRO_TOP_LAYER)'"; \
-	  echo "export MACRO_HALO='$(MACRO_HALO)' MACRO_CHANNEL='$(MACRO_CHANNEL)' MACRO_GRID='$(MACRO_GRID)'";)
+	  echo "export MACRO_HALO='$(MACRO_HALO)' MACRO_CHANNEL='$(MACRO_CHANNEL)' MACRO_GRID='$(MACRO_GRID)'"; \
+	  echo "export PHYSICAL_CELLS='$(PHYSICAL_CELLS)'";)
+
+$(BUILD)/lec.env: FORCE | $(BUILD)
+	@$(call write_env, echo "# Inputs for the Conformal dofiles in flow/scripts/lec/ (generated by make)"; \
+	  $(MMMC_ENV) \
+	  echo "export RTL_FILES='$(RTL_FILES)' RTL_INCDIRS='$(RTL_INCDIRS)' RTL_DEFINES='$(RTL_DEFINES)'"; \
+	  echo "export MACROS='$(MACROS)' LEC_SYNTH_MODE='$(LEC_SYNTH_MODE)'";)
 
 # --- Cadence tool runs ---
 # $(call cadence,<step>,<env file>,<command>): run the command in the build directory, output in <step>.log.
@@ -266,10 +283,11 @@ $(PGV): | $(BUILD)/pnr.env
 	  { $(call voltus,pgv,pgv) < /dev/null > pgv.log 2>&1 || true; }
 	@test -e $@ || { tail -20 $(PGV_DIR)/pgv.log; echo "pgv FAILED -- read $(PGV_DIR)/pgv.log"; exit 1; }
 
-# --- abstract of this design for use as a macro: LEF, timing model per corner, LVS netlist; GDS copied on its own ---
+# --- abstract of this design for use as a macro: LEF, timing model per corner, logic and LVS netlists; GDS copied on its own ---
 $(BUILD)/abstract/$(TOP).lef: $(BUILD)/finish.json $(PNR_DEPS) $(SCRIPTS)/pnr/abstract.tcl
 	$(call pnr_stage,abstract)
-	cp $(BUILD)/final_lvs.v $(BUILD)/abstract/$(TOP).v
+	cp $(BUILD)/final_logic.v $(BUILD)/abstract/$(TOP).v
+	cp $(BUILD)/final_lvs.v $(BUILD)/abstract/$(TOP)_lvs.v
 $(BUILD)/abstract/$(TOP).gds: $(BUILD)/final.gds
 	mkdir -p $(@D)
 	cp $< $@
@@ -291,3 +309,28 @@ $(BUILD)/lvs.rpt: $(BUILD)/final.gds $(MACRO_LVS) $(SCRIPTS)/pegasus/lvs.sh
 	  final_lvs.v $(CELL_CDL) $(MACRO_LVS) > lvs.log 2>&1 || { tail -5 lvs.log; echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
 	@r=$(BUILD)/lvs/$(TOP).lvs.rpt; grep -qE '\bMATCH\b' $$r && ! grep -qE 'MISMATCH' $$r && cp $$r $@ && \
 	  echo "LVS: layout matches netlist" || { echo "LVS FAILED -- read $$r"; exit 1; }
+
+# --- lec (Conformal): RTL vs netlist.v, then netlist.v vs the routed final_logic.v; hard macros are black boxes ---
+# dofile per step (chosen when the recipe runs): the RTL step runs the one Genus wrote, unless LEC_SYNTH_MODE=own or there is none
+lec_do_synth = $$([ "$(LEC_SYNTH_MODE)" = genus ] && [ -s $(BUILD)/genus_lec.do ] && echo $(BUILD)/genus_lec.do || echo $(SCRIPTS)/lec/lec_synth.do)
+lec_do_route = $(SCRIPTS)/lec/lec_route.do
+$(BUILD)/lec_synth.rpt: $(BUILD)/netlist.v $(SCRIPTS)/lec/lec_synth.do $(MACRO_LIBS)
+$(BUILD)/lec_route.rpt: $(BUILD)/netlist.v $(BUILD)/finish.json $(SCRIPTS)/lec/lec_route.do $(MACRO_LIBS)
+$(BUILD)/lec_%.rpt: $(BUILD)/lec.env $(SCRIPTS)/lec/lec_common.tcl $(SCRIPTS)/lec/lec_result.py
+	rm -f $@
+	cd $(BUILD) && source lec.env && mkdir -p logs && \
+	  { $(TIMED) lec_$* $(LEC) $(LEC_FLAGS) -dofile $(lec_do_$*) < /dev/null > lec_$*.log 2>&1 || true; }
+	@python3 $(SCRIPTS)/lec/lec_result.py $* $(BUILD)/lec_$*.log | tee $@.tmp && mv $@.tmp $@ || \
+	  { rm -f $@.tmp; echo "LEC $* FAILED -- read $(BUILD)/lec_$*.log"; exit 1; }
+
+# LEC must still fail on broken netlists: two mutants for each LEC step
+lec-mutation: macros $(BUILD)/lec.env $(BUILD)/netlist.v $(BUILD)/finish.json $(SCRIPTS)/lec/lec_mutation.py
+	cd $(BUILD) && source lec.env && python3 $(SCRIPTS)/lec/lec_mutation.py --work $(BUILD)/lec_mutation --cmd "$(LEC) $(LEC_FLAGS)" \
+	  --check synth $(lec_do_synth) $(BUILD)/netlist.v --check route $(lec_do_route) $(BUILD)/final_logic.v
+
+# --- gls: the RTL testbench on the routed logic netlist with the cell models; hard macros simulate their routed netlists ---
+$(BUILD)/gls_results.xml: $(BUILD)/finish.json $(CELL_VERILOG) $(MACRO_NETLISTS) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) \
+                          $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py
+	$(TIMED) gls python3 $(SCRIPTS)/sim/run_cocotb.py --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
+	  --build-dir $(BUILD)/sim_gls --results $@ --waves $(WAVES) $(addprefix --sim-arg=,$(GLS_XRUN_ARGS)) \
+	  --sources $(BUILD)/final_logic.v $(CELL_VERILOG) $(MACRO_NETLISTS) $(TB_SOURCES)

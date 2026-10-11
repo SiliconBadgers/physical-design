@@ -1,7 +1,7 @@
 # File:        design.mk
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: Design config for sb_sram_256x8, the tile's weight memory built as a hard macro, Track B1. `make abstract DESIGN=sb_sram_256x8` writes its LEF, timing models, GDS and LVS netlist.
+# Date:        2026-10-11
+# Description: Design config for sb_sram_256x8, the tile's weight memory built as a hard macro, Track B1. `make abstract DESIGN=sb_sram_256x8` writes its LEF, timing models, GDS, logic netlist and LVS netlist.
 TOP          := sb_sram_256x8
 RTL_FILES    := $(DESIGN_DIR)/rtl/sb_sram_256x8.v
 RTL_INCDIRS  :=

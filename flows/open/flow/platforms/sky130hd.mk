@@ -13,6 +13,9 @@ LIB_tt   := $(PLATFORM_DIR)/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 TECH_LEF := $(PLATFORM_DIR)/lef/sky130_fd_sc_hd.tlef
 CELL_LEF := $(PLATFORM_DIR)/lef/sky130_fd_sc_hd_merged.lef
 CELL_GDS := $(PLATFORM_DIR)/gds/sky130_fd_sc_hd.gds
+# cell simulation models for gate-level simulation
+CELL_VERILOG := $(SB_PDK)/open/verilog/primitives.v $(SB_PDK)/open/verilog/sky130_fd_sc_hd.v
+GLS_DEFINES  := FUNCTIONAL UNIT_DELAY=\#1
 
 # --- synthesis cells ---
 TIEHI_CELL := sky130_fd_sc_hd__conb_1
