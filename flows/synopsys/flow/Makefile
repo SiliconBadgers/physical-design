@@ -72,6 +72,9 @@ PDN_TCL          ?= $(SCRIPTS)/icc2/pdn.tcl
 GPL_TIMING_DRIVEN      ?= 1
 GPL_ROUTABILITY_DRIVEN ?= 1
 SKIP_CTS_REPAIR_TIMING ?= 0
+# ns of setup clock uncertainty IC Compiler II adds to the SDC's, in every scenario (place and route only: Design Compiler
+# and PrimeTime read the SDC as it is). IC Compiler II with TLU+ sees up to 0.15 ns more setup slack than sign-off.
+PNR_SETUP_MARGIN ?= 0.15
 # lint black boxes and simulation models of the hard macros
 MACRO_VERILOG    ?=
 MACRO_SIM_MODELS ?=
@@ -264,7 +267,7 @@ $(BUILD)/pnr.env: FORCE | $(BUILD)
 	  echo "export CORE_UTILIZATION='$(CORE_UTILIZATION)' ASPECT_RATIO='$(ASPECT_RATIO)' CORE_MARGIN='$(CORE_MARGIN)'"; \
 	  echo "export PLACE_DENSITY='$(PLACE_DENSITY)'"; \
 	  echo "export GPL_TIMING_DRIVEN='$(GPL_TIMING_DRIVEN)' GPL_ROUTABILITY_DRIVEN='$(GPL_ROUTABILITY_DRIVEN)'"; \
-	  echo "export SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)'"; \
+	  echo "export SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)' PNR_SETUP_MARGIN='$(PNR_SETUP_MARGIN)'"; \
 	  echo "export GDS_MAP='$(GDS_MAP)' CELL_GDS='$(CELL_GDS)'"; \
 	  echo "export STARRC='$(STARRC)' TECH_LEF='$(TECH_LEF)' CELL_LEF='$(CELL_LEF)' NXTGRD='$(NXTGRD)'"; \
 	  $(if $(MACROS),echo "export MACRO_NDMS='$(MACRO_NDMS)' MACRO_LEFS='$(MACRO_LEFS)' MACRO_GDS='$(MACRO_GDS)'";) \

@@ -1,6 +1,6 @@
 # File:        common.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: IC Compiler II settings and procs shared by every stage: checkpoints, technology and cell rules, power nets, scenarios, reports and metrics. Inputs are environment variables from pnr.env, written by the Makefile.
 
 source $::env(SCRIPTS)/util/metrics.tcl
@@ -107,6 +107,19 @@ proc connect_pg {} {
 # --- scenarios: one mode (func) at each corner; setup and hold on the sign-off corners ---
 proc sb_bool {cond} { return [expr {$cond ? "true" : "false"}] }
 
+# PNR_SETUP_MARGIN: add setup uncertainty to each clock of the current scenario, on top of the SDC's (simple uncertainty only,
+# not -from/-to), so place and route leave that much slack for the sign-off extraction and delay calculation
+proc pnr_setup_margin {} {
+    set margin [env_or PNR_SETUP_MARGIN 0]
+    if {$margin == 0} { return }
+    foreach_in_collection clk [all_clocks] {
+        set sdc [get_attribute -quiet $clk setup_uncertainty]
+        if {$sdc eq ""} { set sdc 0.0 }
+        set_clock_uncertainty -setup [expr {$sdc + $margin}] $clk
+        sb_note "[get_object_name [current_scenario]]: [get_object_name $clk] setup uncertainty [format %.3f $sdc] + $margin ns (PNR_SETUP_MARGIN)"
+    }
+}
+
 proc setup_scenarios {} {
     remove_modes -all
     remove_corners -all
@@ -125,6 +138,7 @@ proc setup_scenarios {} {
         set_voltage 0.0 -object_list [get_supply_nets VSS]
         set_temperature $::env(TEMP_$c)
         source -echo $::env(SDC_FILE)   ;# not read_sdc: it rejects non-SDC commands such as remove_from_collection
+        pnr_setup_margin
         set_scenario_status func_$c -active true \
             -setup [sb_bool [expr {$c in $::SETUP_CORNERS}]] \
             -hold  [sb_bool [expr {$c in $::HOLD_CORNERS}]] \

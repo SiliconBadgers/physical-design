@@ -1,4 +1,10 @@
 # File:        hal_waivers.txt
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: Xcelium HAL lint waivers for sb_systolic_tile (make lint). One per line: <message code> [<file pattern>]  # reason
+# the SRAM macro's black box (lint reads it instead of the macro's RTL)
+USEPRT */tile/sb_sram_256x8_bb.v   # the black box has ports and no logic, by design
+UNDRIV */tile/sb_sram_256x8_bb.v   # the black box drives nothing; synthesis and STA take the macro from its timing model
+EMPMOD */tile/sb_sram_256x8_bb.v   # the black box module is empty on purpose
+# array edges
+URDREG */tile/rtl/tile_top.sv      # the last PE of each row and column drives a_h/v_h/w_v slices that leave the array unread

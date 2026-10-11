@@ -57,6 +57,8 @@ TB_SOURCES       ?=
 MACRO_VERILOG    ?=
 MACRO_SIM_MODELS ?=
 LINT_WAIVERS     ?= $(wildcard $(DESIGN_DIR)/hal_waivers.txt)
+# HAL rules lint turns off (style rules that fire on correct RTL): flow/scripts/lint/hal_rules.f; empty = every rule
+HAL_ARGS         ?= -f $(SCRIPTS)/lint/hal_rules.f
 CORE_UTILIZATION ?= 40
 ASPECT_RATIO     ?= 1
 CORE_MARGIN      ?= 10
@@ -169,12 +171,12 @@ clean:
 $(BUILD):
 	mkdir -p $@
 
-# --- lint (Xcelium HAL; a warning fails unless hal_waivers.txt waives it) ---
-$(BUILD)/lint.log: $(RTL_FILES) $(MACRO_VERILOG) $(LINT_WAIVERS) $(FLOW_DEPS) $(SCRIPTS)/lint/hal_check.py | $(BUILD)
+# --- lint (Xcelium HAL without the rules in hal_rules.f; a message fails unless hal_waivers.txt waives it) ---
+$(BUILD)/lint.log: $(RTL_FILES) $(MACRO_VERILOG) $(LINT_WAIVERS) $(FLOW_DEPS) $(SCRIPTS)/lint/hal_check.py $(SCRIPTS)/lint/hal_rules.f | $(BUILD)
 	mkdir -p $(BUILD)/lint
 	cd $(BUILD)/lint && rm -f hal.log && rc=0 && \
 	  { $(TIMED) lint $(XRUN) -hal -sv -top $(TOP) $(addprefix -incdir ,$(RTL_INCDIRS)) \
-	    $(addprefix -define ,$(RTL_DEFINES)) $(RTL_FILES) $(MACRO_VERILOG) -l hal.log < /dev/null > hal_stdout.log 2>&1 || rc=$$?; } && \
+	    $(addprefix -define ,$(RTL_DEFINES)) $(HAL_ARGS) $(RTL_FILES) $(MACRO_VERILOG) -l hal.log < /dev/null > hal_stdout.log 2>&1 || rc=$$?; } && \
 	  echo "SB: xrun exit status $$rc" >> hal.log
 	python3 $(SCRIPTS)/lint/hal_check.py $(BUILD)/lint/hal.log $(LINT_WAIVERS) > $@.tmp || \
 	  { cat $@.tmp; rm -f $@.tmp; echo "lint FAILED -- read $(BUILD)/lint/hal.log"; exit 1; }
@@ -251,7 +253,7 @@ voltus  = $(VOLTUS) $(VOLTUS_FLAGS) -log logs/$(1) -files $(SCRIPTS)/voltus/$(2)
 # --- synth (Genus), then the latch, loop and missing-cell check ---
 $(BUILD)/netlist.v: $(BUILD)/synth.env $(RTL_FILES) $(MACRO_LIBS) $(MACRO_LEFS) $(SDC_FILE) $(FLOW_DEPS) $(SCRIPTS)/genus/synth.tcl \
                     $(SCRIPTS)/mmmc.tcl $(SCRIPTS)/util/sb_util.tcl $(SCRIPTS)/genus/synth_check.py
-	rm -f $@
+	rm -f $@ $(BUILD)/synth_check.skip $(BUILD)/synth_check_*.rpt
 	$(call cadence,synth,synth.env,$(call genus,synth))
 	python3 $(SCRIPTS)/genus/synth_check.py --build $(BUILD) --latch-cells "$(LATCH_CELLS)"
 

@@ -1,6 +1,6 @@
 # File:        floorplan.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: Floorplan: die and core size, rows, hard macro placement with halos, optional pin placement and the power grid. Writes floorplan.db.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_init_design
@@ -120,6 +120,42 @@ proc sb_place_macros {macros} {
     }
 }
 
+# is (x, y) within 1 um of the edge of one of the boxes {x1 y1 x2 y2}?
+proc sb_on_edge {x y boxes} {
+    foreach b $boxes {
+        lassign $b x1 y1 x2 y2
+        set near   [expr {$x >= $x1 - 1 && $x <= $x2 + 1 && $y >= $y1 - 1 && $y <= $y2 + 1}]
+        set inside [expr {$x > $x1 + 1 && $x < $x2 - 1 && $y > $y1 + 1 && $y < $y2 - 1}]
+        if {$near && !$inside} { return 1 }
+    }
+    return 0
+}
+
+# floorplan_pg.rpt in one line: dangling wire ends (IMPVFC-94) where rails and straps stop at a macro halo (expected: the halo
+# cuts them), at the core edge (expected only in a block without a core ring), elsewhere; and every other problem, such as opens
+proc sb_pg_summary {rpt} {
+    if {![file exists $rpt]} { puts "SB-WARNING: no $rpt"; return }
+    set h $::env(MACRO_HALO)
+    set halos {}
+    foreach inst [sb_macro_insts] {
+        lassign [join [get_db $inst .bbox]] x1 y1 x2 y2
+        lappend halos [list [expr {$x1 - $h}] [expr {$y1 - $h}] [expr {$x2 + $h}] [expr {$y2 + $h}]]
+    }
+    set core [list [join [get_db designs .core_bbox]]]
+    set n [dict create macro 0 core 0 elsewhere 0 other 0]
+    set fh [open $rpt]
+    foreach line [split [read $fh] \n] {
+        if {[regexp {dangling Wire at \(([-0-9.]+), ([-0-9.]+)\)} $line -> x y]} {
+            dict incr n [expr {[sb_on_edge $x $y $halos] ? "macro" : ([sb_on_edge $x $y $core] ? "core" : "elsewhere")}]
+        } elseif {[regexp {^\s*(\d+) Problem\(s\) \(([^)]+)\)} $line -> count id] && $id ne "IMPVFC-94"} {
+            dict incr n other $count
+        }
+    }
+    close $fh
+    puts "SB: floorplan_pg.rpt: dangling ends [dict get $n macro] at macro halos, [dict get $n core] at the core edge,\
+        [dict get $n elsewhere] elsewhere; [dict get $n other] other problems"
+}
+
 # core from the target utilization and aspect ratio (height / width); the die adds CORE_MARGIN on each side
 set m $::env(CORE_MARGIN)
 set macros [sb_macro_list]
@@ -140,6 +176,7 @@ source [env_or PDN_TCL $::env(SCRIPTS)/pnr/power.tcl]   ;# power grid
 # checks: floorplan, and the power grid reaching every row
 sb_try check_floorplan -out_file $out/floorplan_check.rpt
 sb_try check_connectivity -type special -nets [list $::env(PWR_NET) $::env(GND_NET)] -out_file $out/floorplan_pg.rpt
+sb_pg_summary $out/floorplan_pg.rpt
 
 sb_report floorplan floorplan ""
 sb_save floorplan

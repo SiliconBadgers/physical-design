@@ -44,11 +44,12 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 - Macro placement: `rtl_macro_placer` keeps `MACRO_CHANNEL` (default 80 um, the platform's value) between macros and to the core edge; `MACRO_HALO` (default 10 um) keeps standard cells out around each macro.
 - The macro's power pins are its met4 straps; the platform power grid connects them to met5. The macro routes up to met4 only (`MAX_ROUTING_LAYER` in its `design.mk`).
 - LEC treats the macro as a black box (check the macro itself with `make lec DESIGN=sb_sram_256x8`); GLS simulates its routed netlist (`abstract/<macro>.v`).
+- The abstract LEF carries each pin's antenna gate and diffusion area (`abstract_antenna.py`), so antenna repair in the parent protects wires into the macro.
 
 ## Status
 
 - gcd: every stage passes (0 DRC, LVS match); setup slack and area at or better than ORFS on the same netlist.
-- tile (four `sb_sram_256x8` macros) at 65 MHz: every stage passes (0 DRC, LVS match); area and wirelength at or better than ORFS on the same netlist, setup slack +1.02 ns (ORFS +1.31 ns).
+- tile (four `sb_sram_256x8` macros) at 65 MHz: every stage passes (0 DRC, LVS match); area and wirelength at or better than ORFS on the same netlist, setup slack +0.99 ns (ORFS +1.31 ns).
 - LEC (RTL vs netlist, netlist vs routed netlist) passes on gcd, `sb_sram_256x8` and the tile; `make lec-mutation` catches 4/4 broken netlists on each. GLS on the routed netlist passes (gcd 2/2, tile 3/3 with the macros' routed netlists).
 - Not yet: GLS with SDF (wire and cell) delays; today's GLS uses unit cell delays.
 

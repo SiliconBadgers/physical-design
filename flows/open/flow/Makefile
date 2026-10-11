@@ -293,9 +293,10 @@ $(BUILD)/final.odb: $(BUILD)/route.odb $(PNR_DEPS) $(SCRIPTS)/pnr/finish.tcl
 	$(call pnr_stage,finish)
 
 # abstract of this design for use as a macro: LEF, timing model (tt), LVS and gate netlists; GDS copied on its own
-$(BUILD)/abstract/$(TOP).lef: $(BUILD)/final.odb $(SCRIPTS)/pnr/abstract.tcl
+$(BUILD)/abstract/$(TOP).lef: $(BUILD)/final.odb $(SCRIPTS)/pnr/abstract.tcl $(SCRIPTS)/pnr/abstract_antenna.py
 	mkdir -p $(BUILD)/abstract
 	$(call pnr_stage,abstract)
+	python3 $(SCRIPTS)/pnr/abstract_antenna.py --lef $@ --def $(BUILD)/final.def --cell-lefs $(CELL_LEF)
 	cp $(BUILD)/final.cdl $(BUILD)/abstract/$(TOP).cdl
 	cp $(BUILD)/final.v $(BUILD)/abstract/$(TOP).v
 $(BUILD)/abstract/$(TOP).gds: $(BUILD)/final.gds

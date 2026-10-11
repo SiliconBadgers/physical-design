@@ -1,42 +1,18 @@
 # File:        hal_waivers.txt
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: Xcelium HAL lint waivers for gcd (make lint). One per line: <message code> [<file pattern>]  # reason
-# gcd.v is PyMTL-generated code taken unchanged from OpenROAD-flow-scripts; every track uses it as is, so style rules are waived for it.
-# naming and file layout of the generated code
-DIFFMN */gcd/rtl/gcd.v   # all modules in one generated file
-MULTMF */gcd/rtl/gcd.v   # all modules in one generated file
-LCVARN */gcd/rtl/gcd.v   # generated module names (Name_0x<hash>)
-NUMSUF */gcd/rtl/gcd.v   # generated temporaries (curr_state__0)
-UCCONN */gcd/rtl/gcd.v   # generated parameter names (reset_value)
-KEYWOD */gcd/rtl/gcd.v   # port named 'out' is a VHDL keyword only; Verilog flow
-NOBLKN */gcd/rtl/gcd.v   # unnamed always blocks
-EMPBLK */gcd/rtl/gcd.v   # empty else branches of the generated if/else chains
+# gcd.v is PyMTL-generated code taken unchanged from OpenROAD-flow-scripts; every track uses it as is. Most style rules are off for
+# every design (flow/scripts/lint/hal_rules.f); these are the other messages it gets, each checked.
+# coding style, unused ports and parameters of the generated code
 OLDALW */gcd/rtl/gcd.v   # Verilog-2001 always blocks, not SystemVerilog always_ff
-MICAWS */gcd/rtl/gcd.v   # one if chain per state in the next-state block
-STYVAL */gcd/rtl/gcd.v   # explicit bus widths on ports
-ONPNSG */gcd/rtl/gcd.v   # one-bit buses ([0:0]) on generated ports
-PRMVAL */gcd/rtl/gcd.v   # unsized localparams for mux selects and states
 USEPAR */gcd/rtl/gcd.v   # nports kept for the generator's assertion only
 USEPRT */gcd/rtl/gcd.v   # every generated submodule has clk and reset ports, used or not
-DALIAS */gcd/rtl/gcd.v   # clk and reset fan out to both submodules through wrapper wires
-DIFCLK */gcd/rtl/gcd.v   # clk renamed through the wrapper wires (state$clk -> clk)
-DIFRST */gcd/rtl/gcd.v   # reset renamed through the wrapper wires
-ATLGLC */gcd/rtl/gcd.v   # the top module only wires ctrl to dpath (assigns)
 # literals and widths: integer literals assigned to narrow signals, values fit
-IMPDTC */gcd/rtl/gcd.v   # integer state constants compared with a 2-bit state
 INTTOB */gcd/rtl/gcd.v   # 0/1 integer literals assigned to 1-bit outputs
-TRUNCZ */gcd/rtl/gcd.v   # constant truncation without loss of bits
 ULCMPE */gcd/rtl/gcd.v   # 2-bit state compared with 32-bit constants that fit
-LRGOPR */gcd/rtl/gcd.v   # 16-bit compare and subtract in the datapath
 POOBID */gcd/rtl/gcd.v   # 3-input mux with a 2-bit select: sel is never 3 (A_MUX_SEL_* are 0..2)
 # structure
 LATBAS */gcd/rtl/gcd.v   # do_swap/do_sub are read only in the branch that assigns them (do_sub never): no latch after synthesis (make synth checks)
 LATMLG */gcd/rtl/gcd.v   # same do_swap/do_sub as LATBAS
 URDREG */gcd/rtl/gcd.v   # do_sub is assigned and never read; synthesis removes it
-REVROP */gcd/rtl/gcd.v   # combinational outputs (req_rdy) read in the next-state block
-SYNPRT */gcd/rtl/gcd.v   # control outputs decoded from the state register (Moore outputs)
-TPOUNR */gcd/rtl/gcd.v   # req_rdy/resp_val handshake outputs are decoded from the state, not registered
-FFWASR */gcd/rtl/gcd.v   # state register has a synchronous reset
-FFWNSR */gcd/rtl/gcd.v   # datapath registers a_reg/b_reg need no reset (loaded on a request)
-CBPAHI */gcd/rtl/gcd.v   # HAL rule error: combinational path across submodules (next state and register enables through RegRst/RegEn); generated hierarchy, timed by sta

@@ -59,6 +59,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `CTS_BUF_LIST` | `clkbuf_4 clkbuf_8 clkbuf_16` | cells the clock tree may use; empty = the tool picks |
 | `GPL_TIMING_DRIVEN`, `GPL_ROUTABILITY_DRIVEN` | `1` | `create_placement -timing_driven`, `-congestion` |
 | `SKIP_CTS_REPAIR_TIMING` | `0` | `1` = no setup and hold repair after the clock tree |
+| `PNR_SETUP_MARGIN` | `0.15` | ns of setup clock uncertainty IC Compiler II adds to the SDC's in every scenario, for every design; Design Compiler and PrimeTime read the SDC as it is. IC Compiler II (TLU+) sees up to 0.15 ns more setup slack than PrimeTime with StarRC, so without it a design can close in place and route and miss sign-off |
 | `IO_CONSTRAINTS`, `PDN_TCL` | none, `flow/scripts/icc2/pdn.tcl` | pin constraints and power grid (IC Compiler II Tcl) |
 | `DC_COMPILE` `SYNTH_FLATTEN` `SYNTH_RETIME` | `compile_ultra` `1` `0` | synthesis |
 | `GDS_TOOL` | `icc2` | `klayout` merges `final.def` with the cell GDS instead of `write_gds` |
@@ -90,15 +91,16 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 ## Notes
 
 - A stage that runs Design Compiler, PrimeTime, IC Compiler II, its Library Manager, Library Compiler or Formality fails when its log has a line that starts with `Error:`, even if the tool exits normally: some commands print an error and go on (`write_gds` with a layer map it cannot read, `create_terminal`). StarRC's `extract.log` is checked for `ERROR`. The check is `flow/scripts/util/check_log.sh`; a harmless message can be waived there by its ID, with the reason (none is). `lec-mutation` is not checked this way: its mutants must fail. KLayout exits with an error status on its own.
+- `check_timing` and the analysis coverage (in `sta_<corner>.rpt` and `signoff_<corner>.rpt`) on the tile: `rst_n` has no input delay (it is asynchronous and the SDC false-paths it), and the coverage shows untested only (a) recovery/removal of the reset synchronizer's two flip-flops, which only `rst_n` reaches, (b) setup/hold of the synchronizer's first `D` input, which is tied to a constant, and (c) `min_pulse_width` on the flip-flop reset pins, where no clock arrives. These are expected. Any other unconstrained endpoint, input without an input delay or untested check is a missing constraint.
 
 ## Status
 
 - Run on Synopsys tools (CAE lab, 2026-10-11): Design Compiler, PrimeTime, Formality, Library Compiler and VCS Y-2026.03, IC Compiler II X-2025.06-SP3, StarRC 2026.03, KLayout 0.30.12; `lint` with VCS (no VC SpyGlass there). Needs the PDK at 6ba406e or later (IC Compiler II layer map, tap and fill cells in the NDM, hole-area rules in the `.tf`).
-- gcd (6.2 ns, tt): every stage passes; 0 DRC, LVS match, LEC passes, GLS 2/2, `lec-mutation` 4/4. Sign-off setup slack −0.06 ns on 4 paths, hold +0.51 ns.
-- gcd full signoff (`SETUP_CORNERS=ss HOLD_CORNERS=ff`): every stage passes; ss setup −0.13 ns on 10 paths, ff hold +0.36 ns. With 6.0 ns it was −0.11 ns: the tools spend the extra time on smaller cells.
-- IC Compiler II (TLU+) sees 0.00 to +0.02 ns where PrimeTime with StarRC sees −0.06 to −0.13 ns, so gcd's sign-off setup slack stays slightly negative.
-- `sb_sram_256x8` (`make abstract`): passes; setup +3.68 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
-- tile (four macros, 65 MHz): every stage passes; setup +1.08 ns (Track A +1.02 ns), hold +0.02 ns; 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes about 12 minutes.
+- gcd (6.2 ns, tt): every stage passes; 0 DRC, LVS match, LEC passes, GLS 2/2, `lec-mutation` 4/4. Sign-off setup −0.14 ns on two output paths (`resp_msg[15]`, `resp_msg[14]`), register paths +0.20 ns; hold +0.49 ns.
+- gcd full signoff (`SETUP_CORNERS=ss HOLD_CORNERS=ff`): every stage passes; ss setup −0.34 ns (the same two outputs, and one register path at −0.03 ns), ff hold +0.39 ns. At 6.0 ns: tt −0.10 ns, ss −0.32 ns, only on the two outputs.
+- The clock tree (one buffer: `clk` has a driving cell) adds 0.26 ns (tt) to 0.43 ns (ss) of clock latency. After CTS, IC Compiler II gives the I/O paths that latency at the port as well (`compute_clock_latency`, which it runs by itself); PrimeTime reads the SDC and does not, so it sees the output paths 0.26 to 0.43 ns slower. `PNR_SETUP_MARGIN` covers the TLU+/StarRC difference on the register paths (at 6.0 ns they sign off: +0.11 ns tt, +0.01 ns ss), not this. Open.
+- `sb_sram_256x8` (`make abstract`): passes; setup +3.70 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
+- tile (four macros, 65 MHz): every stage passes; setup +1.10 ns (Track A +1.02 ns), hold +0.31 ns (+0.02 ns in an earlier build: it moves with the clock tree); 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes 9 to 12 minutes.
 - Not yet: IR drop (needs a rail analysis tool and rail views of the cells).
 
 ## First run checklist
@@ -115,7 +117,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 10. `make finish`: `final_lvs.v` has power pins and the tap and filler cells, `final.v` has neither; `final_logic.v` also has no `diode_2` cells and `finish.log` has no `final_logic.v keeps the antenna diodes` warning (`write_verilog -exclude diode_cells`); `extract.log` maps every LEF layer; `signoff_ss.rpt` shows every net annotated.
 11. `make gds`: `write_gds` accepts the layer map, and the GDS has pin labels on datatype 5 (met1 = 68/5), which KLayout LVS reads. If LVS fails on pins, run `make lvs GDS_TOOL=klayout` to tell a layer-map problem from a netlist problem.
 12. `make drc lvs`: 0 violations, netlists match.
-13. Compare `build/gcd/<variant>/*.json` with Track A. The gcd clock is 6.2 ns, recalibrated at ss on the first run (Track A's 6 ns missed ss by 0.11 ns); recalibrate again if your tools differ, and update `constraint.sdc` and this page.
+13. Compare `build/gcd/<variant>/*.json` with Track A. The gcd clock is 6.2 ns (Track A: 6.0 ns), and sign-off still misses on two output paths (Status); recalibrate if your tools differ, and update `constraint.sdc` and this page.
 14. `make abstract DESIGN=sb_sram_256x8`: `floorplan.log` has no `create_terminal` error and `abstract.log` passes the LEF check (VDD and VSS pins on met4); `abstract/<top>_<corner>.lib` has bus pins and the cell `sb_sram_256x8`; `abstract_ndm.log` has no `check_workspace` errors (the LEF and `.db` pins agree).
 15. `make floorplan DESIGN=tile`: the macros link from the `.ndm`; `floorplan.rpt` shows no floating macro power pins (`check_pg_connectivity`), met4 straps and rails stop at the macros and met5 crosses them; `macro_place.tcl` placed four macros.
 16. `make lvs DESIGN=tile`: `write_gds` merges the macro GDS; netlists match. If not, try `GDS_TOOL=klayout` on the macro (`make abstract DESIGN=sb_sram_256x8 GDS_TOOL=klayout`) and on the tile.

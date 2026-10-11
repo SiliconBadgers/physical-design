@@ -1,6 +1,6 @@
 # File:        pdn.tcl
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
+# Date:        2026-10-11
 # Description: Power grid (IC Compiler II): met1 rails along the rows, met4 and met5 straps, via stacks where they cross; with hard macros, met5 runs over them and connects to their met4 power pins. Copy it and run with PDN_TCL=<your copy> to change the grid.
 
 # Sizes in um (same grid as the open sky130hd platform)
@@ -36,15 +36,12 @@ if {![sizeof_collection $macros]} {
     set_pg_strategy S_mesh -core -pattern {{name: P_mesh} {nets: {VDD VSS}}} -extension $extension
     set strategies {S_rail S_mesh}
 } else {
-    # met4 stops at the macros; met5 crosses them
+    # met4 stops at the macros; met5 crosses them, with vias down to the macros' met4 VDD and VSS pins where they cross
     create_pg_mesh_pattern P_m4 -layers [list $m4]
     set_pg_strategy S_m4 -core -pattern {{name: P_m4} {nets: {VDD VSS}}} -extension $extension {*}$avoid_macros
     create_pg_mesh_pattern P_m5 -layers [list $m5]
     set_pg_strategy S_m5 -core -pattern {{name: P_m5} {nets: {VDD VSS}}} -extension $extension
-    # Macros: connect each macro's VDD and VSS pins (met4) to the met5 straps above it
-    create_pg_macro_conn_pattern P_macro -pin_conn_type scattered_pin -layer {met5 met4}
-    set_pg_strategy S_macro -macros $macros -pattern {{name: P_macro} {nets: {VDD VSS}}}
-    set strategies {S_rail S_m4 S_m5 S_macro}
+    set strategies {S_rail S_m4 S_m5}
 }
 
 # Build all of it in one go; vias are added where shapes of the same net cross
