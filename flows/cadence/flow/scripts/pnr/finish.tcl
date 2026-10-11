@@ -7,9 +7,12 @@ source $::env(SCRIPTS)/pnr/common.tcl
 sb_open route
 set out $::env(OUT_DIR)
 
-# fill empty sites: decoupling-capacitor fillers first, then plain fillers
+# fill empty sites: decoupling-capacitor fillers first, only where their met1 pins clear the routed wires
+# (add_fillers_with_drc false: no second pass without DRC checks), then plain fillers (rails only) in every gap left
 set_db add_fillers_cells $::env(DECAP_CELLS)
+set_db add_fillers_with_drc false
 add_fillers
+set_db add_fillers_with_drc true
 set_db add_fillers_cells $::env(FILL_CELLS)
 add_fillers
 sb_connect_pg   ;# power pins of every cell added after the floorplan
@@ -17,6 +20,9 @@ sb_try check_place $out/finish_check_place.rpt
 sb_try check_drc -out_file $out/finish_drc.rpt
 
 # extraction: wire R and C of every net (EXTRACT_EFFORT=signoff runs standalone Quantus)
+# at every corner (Tempus, Voltus and the abstract read all three SPEFs): extract_rc only extracts the RC corners of active views
+proc sb_views {corners} { lmap c $corners { string cat view_ $c } }
+set_analysis_view -setup [sb_views {ss tt ff}] -hold [sb_views {ss tt ff}] -leakage view_tt -dynamic view_tt
 set_db extract_rc_engine post_route
 set_db extract_rc_effort_level $::env(EXTRACT_EFFORT)
 set_db extract_rc_coupled true
@@ -24,6 +30,7 @@ extract_rc
 foreach c {ss tt ff} {
     write_parasitics -spef_file $out/final_$c.spef -rc_corner rc_$c
 }
+set_analysis_view -setup [sb_views $::env(SETUP_CORNERS)] -hold [sb_views $::env(HOLD_CORNERS)] -leakage view_tt -dynamic view_tt
 
 # netlists: for timing (with the clock tree), logic only for LEC and GLS (no physical-only cells, power pins or cell definitions),
 # and for LVS (power pins and physical cells, no plain fillers)

@@ -7,7 +7,12 @@ sb_open floorplan
 set out $::env(OUT_DIR)
 
 set_db place_global_max_density $::env(PLACE_DENSITY)
-set_db place_global_timing_driven [expr {$::env(GPL_TIMING_DRIVEN) ? "true" : "false"}]
+# Innovus 21.19 has no such attribute (its placement is always timing driven); asked first, so no error line in the log
+if {[is_attribute -obj_type root place_global_timing_driven]} {
+    set_db place_global_timing_driven [expr {$::env(GPL_TIMING_DRIVEN) ? "true" : "false"}]
+} else {
+    puts "SB-WARNING: no place_global_timing_driven in Innovus [get_db program_version]: placement is timing driven, GPL_TIMING_DRIVEN ignored"
+}
 set_db place_global_place_io_pins true   ;# pins not placed in floorplan go next to their logic
 
 # placement, then slew, capacitance, fanout and setup repair, then legalization

@@ -115,7 +115,8 @@ proc sb_place_macros {macros} {
     sb_try create_route_halo -all_blocks -bottom_layer $::env(MIN_ROUTING_LAYER) -top_layer $::env(MACRO_TOP_LAYER) -space $h
     foreach inst [sb_macro_insts] {
         lassign [join [get_db $inst .bbox]] bx1 by1 bx2 by2
-        sb_try cut_rows -area [list [expr {$bx1 - $h}] [expr {$by1 - $h}] [expr {$bx2 + $h}] [expr {$by2 + $h}]]
+        set box [list [expr {$bx1 - $h}] [expr {$by1 - $h}] [expr {$bx2 + $h}] [expr {$by2 + $h}]]
+        if {[llength [info commands cut_rows]]} { sb_try cut_rows -area $box } else { sb_try split_row -area $box }   ;# split_row in 21.x
     }
 }
 

@@ -24,12 +24,15 @@ add_rings -nets $nets -type core_rings -follow core \
     -layer {top met5 bottom met5 left met4 right met4} \
     -width 2.0 -spacing $spacing -offset 1.0
 
-# vertical met4 straps across the core, with via stacks down to met1
+# vertical met4 straps across the core, with via stacks down to met1; each strap runs on to its own ring (met5 there),
+# else they stop at the core edge, short of the ring
 set_db add_stripes_stacked_via_bottom_layer met1
-set_db add_stripes_stacked_via_top_layer    met4
+set_db add_stripes_stacked_via_top_layer    met5
+set_db add_stripes_extend_to_closest_target ring
 add_stripes -nets $nets -layer met4 -direction vertical \
     -width $width -spacing $spacing -set_to_set_distance $pitch \
-    -area [list $cx1 $cy1 $cx2 $cy2] -start [expr {$cx1 + $pitch / 2.0}] {*}$met4_keepout
+    -start [expr {$cx1 + $pitch / 2.0}] {*}$met4_keepout
+set_db add_stripes_extend_to_closest_target none
 
 # horizontal met5 straps from die edge to die edge; their ends become the block's VDD/VSS pins (Voltus feeds power in there)
 # they cross the macros and drop vias onto the macros' met4 power pins (vias are skipped on standard-cell pins only)

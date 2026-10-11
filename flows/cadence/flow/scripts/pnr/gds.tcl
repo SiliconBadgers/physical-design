@@ -25,8 +25,9 @@ foreach line $lines {
 close $map
 
 sb_try set_db write_stream_virtual_connection false   ;# no "VDD:" labels on virtually connected pins
+# GDS units 1 nm: -unit in Innovus 21.x, -units in later releases
 write_stream $out/final.gds -map_file $out/stream.map -merge [concat $::env(CELL_GDS) [env_or MACRO_GDS ""]] \
-    -uniquify_cell_names -mode ALL -units 1000
+    -uniquify_cell_names -mode ALL [expr {[sb_innovus21] ? "-unit" : "-units"}] 1000
 
 sb_done gds
 exit

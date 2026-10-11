@@ -1,13 +1,16 @@
 # File:        route.tcl
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: Detailed route (global and detailed, with antenna repair by layer change), post-route setup and hold repair, and DRC, connectivity and antenna checks. Writes route.db.
+# Description: Detailed route (global and detailed, with antenna repair by layer change and diodes), post-route setup and hold repair, and DRC, connectivity and antenna checks. Writes route.db.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_open grt
 set out $::env(OUT_DIR)
 
 set_db route_design_with_timing_driven true
 set_db route_design_with_si_driven true
+# antenna repair: layer changes first, then diodes where those are not enough
+set_db route_design_antenna_diode_insertion true
+set_db route_design_antenna_cell_name $::env(ANTENNA_CELL)
 route_design
 
 # setup and hold repair with real wires

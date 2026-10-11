@@ -39,8 +39,10 @@ SITE        := CoreSite
 FILL_CELLS  := FILL64 FILL32 FILL16 FILL8 FILL4 FILL2 FILL1
 # fillers with a decoupling capacitor (they have devices, so LVS sees them)
 DECAP_CELLS := FILL_DECAP16 FILL_DECAP8
+# antenna diode the router inserts where layer changes cannot fix an antenna violation
+ANTENNA_CELL := ANTENNA
 # cells with no logic (fillers, decaps, antenna diode): left out of final_logic.v, the logic netlist
-PHYSICAL_CELLS := $(FILL_CELLS) $(DECAP_CELLS) ANTENNA
+PHYSICAL_CELLS := $(FILL_CELLS) $(DECAP_CELLS) $(ANTENNA_CELL)
 MIN_ROUTING_LAYER     := met1
 MAX_ROUTING_LAYER     := met5
 # clock nets route on these layers

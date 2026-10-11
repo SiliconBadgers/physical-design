@@ -33,8 +33,12 @@ foreach c {ss tt ff} {
     if {![file exists $lib]} { error "no timing model written for $c" }
 }
 
-# LEF: the power straps on the top layer as pins, obstructions on every layer up to it
-write_lef_abstract -5.8 -stripe_pins -pg_pin_layers [list $layer] -specify_top_layer $layer $dir/$top.lef
+# LEF: the power straps on the top layer as pins, obstructions on every layer up to it;
+# antenna areas of the pins (ANTENNAGATEAREA, ANTENNADIFFAREA) only if check_process_antenna ran first
+sb_try check_process_antenna -out_file $dir/${top}_antenna.rpt
+# the top-layer option is -top_layer in Innovus 21.x
+write_lef_abstract -5.8 -stripe_pins -pg_pin_layers [list $layer] [expr {[sb_innovus21] ? "-top_layer" : "-specify_top_layer"}] $layer \
+    $dir/$top.lef
 if {![file exists $dir/$top.lef]} { error "no LEF written" }
 
 sb_done abstract

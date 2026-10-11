@@ -49,7 +49,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `lec-mutation` | Conformal | both LEC steps must fail on broken netlists |
 
 Settings in `designs/<design>/design.mk`, or on the `make` line: `CORE_UTILIZATION`, `ASPECT_RATIO`, `CORE_MARGIN`, `PLACE_DENSITY`, `IO_CONSTRAINTS`, `GPL_TIMING_DRIVEN`, `CTS_BUF_LIST`, `CTS_INV_LIST`, `SKIP_CTS_REPAIR_TIMING`, `PDN_STRAP_PITCH`.
-Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `EXTRACT_EFFORT` (`signoff`), `SKIP_IR=1`, `DRC_DENSITY=1`, `NCPU`, `LEC_SYNTH_MODE` (`genus`: the dofile Genus wrote; `own`: `lec_synth.do`), `GLS_XRUN_ARGS` (`-seq_udp_delay 50ps`).
+Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `EXTRACT_EFFORT` (`signoff`), `SKIP_IR=1`, `DRC_DENSITY=1`, `NCPU`, `LEC_SYNTH_MODE` (`genus`: the dofile Genus wrote; `own`: `lec_synth.do`), `GLS_XRUN_ARGS` (`-seq_udp_delay 50ps`), `SIM_TIMEOUT` (`900`: seconds one `sim` or `gls` run may take; past it the simulator is killed and the stage fails).
 
 ## Layout
 
@@ -86,6 +86,7 @@ Flow settings: `SETUP_CORNERS` (`tt`), `HOLD_CORNERS` (`tt`), `SYNTH_EFFORT`, `E
 - `grt` is Innovus's early global route (congestion and timing estimate); `route_design` in `route` routes again in full.
 - A metric a script cannot read is `null`; the report next to it has the number.
 - Cadence tools can exit 0 after a script error, so a stage passes only if its log ends with `SB: <name> done`.
+- A stage also fails on any tool error line in its log, even after `SB: <name> done` (a command inside `sb_try` can fail and the script goes on): Innovus, Tempus and Voltus `**ERROR:`, Quantus `ERROR (<ID>) :`, Xcelium `*E,`/`*F,` (`sim`, `gls`; `lint` keeps its own HAL check). `flow/scripts/util/log_check.sh` does it for every stage; a harmless error is waived by its message ID, with a reason, in `flow/scripts/util/log_waivers.txt` (empty today). A failed stage leaves no `<stage>.json` (or other target), so make runs it again.
 - `final.v` (with the antenna diodes, which the extracted parasitics include) is for Tempus; `final_logic.v` (no fillers, decaps, antenna diodes or power pins) is for LEC and GLS; LVS uses `final_lvs.v`.
 - LEC passes on compare points with none non-equivalent, aborted or unknown (`lec_result.py` reads the `No of ... points` lines). In `lec_route`, key points map by name: Innovus keeps the instance names, so no renaming rules are needed.
 - GLS: the cell models have zero delay; `-seq_udp_delay` gives every flip-flop a clock-to-Q delay, so the clock tree cannot race the data (it also turns off the specify blocks). Do not use `-notimingchecks`: it stops the delayed clock and data nets the flip-flop models need.

@@ -8,6 +8,10 @@ source $::env(SCRIPTS)/util/sb_util.tcl
 set_multi_cpu_usage -local_cpu [env_or NCPU 4]
 set_db design_process_node 130
 
+# Innovus 21.x: some options are spelled otherwise there (write_stream -unit, write_lef_abstract -top_layer); chosen by release,
+# not by trying, because a failed try leaves an error line in the log and make fails the stage on it
+proc sb_innovus21 {} { expr {[get_db program_major_version] < 22} }
+
 # settings every Innovus session needs, also after read_db
 proc sb_settings {} {
     set_db timing_analysis_type ocv     ;# early/late analysis on every path

@@ -1,0 +1,5 @@
+# File:        log_waivers.txt
+# Author:      Isaac Hagedorn
+# Date:        2026-10-11
+# Description: Tool error messages log_check.sh ignores because they are harmless in a passing run. One message ID per line
+#              (IMPXXX-123, EXTXXX-123 or an Xcelium code), then "# reason". No patterns. Empty: no waiver is needed so far.

@@ -14,10 +14,13 @@ set_multi_cpu_usage -local_cpu [env_or NCPU 4]
 
 # --- 1. views, netlist, extracted wires ---
 read_mmmc $::env(SCRIPTS)/mmmc.tcl
+# cells without a timing model (the antenna diode in final.v) are defined by their LEF
+read_physical -lef [concat $::env(TECH_LEF) $::env(CELL_LEF) [env_or MACRO_LEFS ""]]
 read_netlist $::env(NETLIST) -top $::env(TOP)
 init_design
+# SPEF of each active corner (read_spef rejects an RC corner no active view uses)
 if {$spef ne ""} {
-    foreach c {ss tt ff} { read_spef -rc_corner rc_$c ${spef}_$c.spef }
+    foreach c [lsort -unique [concat $::env(SETUP_CORNERS) $::env(HOLD_CORNERS) tt]] { read_spef -rc_corner rc_$c ${spef}_$c.spef }
 }
 set_db timing_analysis_type ocv     ;# early/late analysis on every path
 set_db timing_analysis_cppr both    ;# remove common clock path pessimism
