@@ -124,7 +124,7 @@ proc setup_scenarios {} {
         set_voltage $::env(VOLT_$c) -object_list [get_supply_nets VDD]
         set_voltage 0.0 -object_list [get_supply_nets VSS]
         set_temperature $::env(TEMP_$c)
-        read_sdc $::env(SDC_FILE)
+        source -echo $::env(SDC_FILE)   ;# not read_sdc: it rejects non-SDC commands such as remove_from_collection
         set_scenario_status func_$c -active true \
             -setup [sb_bool [expr {$c in $::SETUP_CORNERS}]] \
             -hold  [sb_bool [expr {$c in $::HOLD_CORNERS}]] \
@@ -189,7 +189,8 @@ proc sb_timing_metrics {stage} {
 # clock skew (ns): largest launch and capture clock latency difference on the worst register-to-register setup paths
 proc sb_clock_skew {} {
     set skew ""
-    foreach_in_collection path [get_timing_paths -delay_type max -max_paths 1000] {
+    # only register-to-register paths: in sb_sram_256x8 the 1000 worst paths all start at input ports
+    foreach_in_collection path [get_timing_paths -delay_type max -max_paths 1000 -from [all_registers] -to [all_registers]] {
         if {[get_attribute [get_attribute $path startpoint] object_class] ne "pin"} { continue }
         if {[get_attribute [get_attribute $path endpoint] object_class] ne "pin"} { continue }
         set d [expr {abs([get_attribute $path startpoint_clock_latency] - [get_attribute $path endpoint_clock_latency])}]

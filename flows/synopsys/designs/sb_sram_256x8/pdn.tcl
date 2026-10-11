@@ -18,5 +18,8 @@ compile_pg -strategies {S_rail S_m4}
 foreach net {VDD VSS} {
     set straps [get_shapes -quiet -of_objects [get_nets $net] -filter "layer_name==met4"]
     if {![sizeof_collection $straps]} { error "no met4 straps on $net" }
-    foreach_in_collection strap $straps { create_terminal -object $strap -port $net }
+    # -of_objects copies the net's shapes as terminals of its port (-object with -port refuses a shape that
+    # belongs to a net: NDMUI-132)
+    create_terminal -of_objects $straps
+    if {![sizeof_collection [get_terminals -quiet -of_objects [get_ports $net]]]} { error "no terminals on port $net" }
 }

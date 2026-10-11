@@ -64,6 +64,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `GDS_TOOL` | `icc2` | `klayout` merges `final.def` with the cell GDS instead of `write_gds` |
 | `LINT_TOOL`, `CORES` | `auto`, `4` | `vc` or `vcs`; CPU cores per tool |
 | `GLS_VCS_ARGS` | none | extra VCS compile options for `gls` |
+| `SIM_TIMEOUT` | `900` | seconds one `sim` or `gls` run may take; past it the simulator is killed and the stage fails (a hang is often a combinational loop) |
 | `MACRO_HALO`, `MACRO_CHANNEL` | `10`, `80` | um: standard-cell keep-out around each macro; space between macros and to the core edge |
 | `MACRO_VARIANT` | `base` | variant of the macros' builds |
 
@@ -86,13 +87,18 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 - Every `final.gds` gets drawing metal under its top-level pin shapes (`pin_metal.py`), so a wire that ends at a macro pin connects.
 - LEC treats the macro as a black box (its `.db` has no logic; check the macro itself with `make lec DESIGN=sb_sram_256x8`); GLS simulates its routed netlist (`abstract/<macro>.v`).
 
+## Notes
+
+- A stage that runs Design Compiler, PrimeTime, IC Compiler II, its Library Manager, Library Compiler or Formality fails when its log has a line that starts with `Error:`, even if the tool exits normally: some commands print an error and go on (`write_gds` with a layer map it cannot read, `create_terminal`). StarRC's `extract.log` is checked for `ERROR`. The check is `flow/scripts/util/check_log.sh`; a harmless message can be waived there by its ID, with the reason (none is). `lec-mutation` is not checked this way: its mutants must fail. KLayout exits with an error status on its own.
+
 ## Status
 
-- Written, not yet run on Synopsys tools.
-- Checked without them: Tcl, shell and Python syntax; `make all DESIGN=gcd` with stub tools (every stage, reruns, variants, a failing stage); the KLayout steps for real on Track A's gcd layout (0 DRC violations, LVS match through `v2cdl.py`, also with `GDS_TOOL=klayout`).
-- The 6 ns clock comes from Track A, which signs off at tt. Track A's routed gcd timed at ss with the same Liberty files has −3.2 ns setup slack, so expect negative setup slack in a full-signoff variant (`SETUP_CORNERS=ss HOLD_CORNERS=ff`) until the clock is recalibrated.
-- The tile (`DESIGN=tile`, four `sb_sram_256x8` macros): written, not yet run on Synopsys tools. Checked with stub tools (macro build first, reruns, knob isolation); the KLayout steps for real on Track A's tile and block layouts (LVS match with the macro; without `pin_metal.py` the macro does not match).
-- LEC and GLS: written, not yet run on Synopsys tools. Checked with stub tools on gcd, `sb_sram_256x8` and the tile (`lec`, `lec-mutation`, `gls`, `all`, reruns, failing LEC); GLS for real through cocotb's VCS runner with Icarus standing in for `vcs`, on Track A's routed netlists (gcd 2/2, tile 3/3 with the macro's routed netlist); the mutations on Track A's netlists, also respelled as Design Compiler and IC Compiler II write them.
+- Run on Synopsys tools (CAE lab, 2026-10-11): Design Compiler, PrimeTime, Formality, Library Compiler and VCS Y-2026.03, IC Compiler II X-2025.06-SP3, StarRC 2026.03, KLayout 0.30.12; `lint` with VCS (no VC SpyGlass there). Needs the PDK at 6ba406e or later (IC Compiler II layer map, tap and fill cells in the NDM, hole-area rules in the `.tf`).
+- gcd (6.2 ns, tt): every stage passes; 0 DRC, LVS match, LEC passes, GLS 2/2, `lec-mutation` 4/4. Sign-off setup slack −0.06 ns on 4 paths, hold +0.51 ns.
+- gcd full signoff (`SETUP_CORNERS=ss HOLD_CORNERS=ff`): every stage passes; ss setup −0.13 ns on 10 paths, ff hold +0.36 ns. With 6.0 ns it was −0.11 ns: the tools spend the extra time on smaller cells.
+- IC Compiler II (TLU+) sees 0.00 to +0.02 ns where PrimeTime with StarRC sees −0.06 to −0.13 ns, so gcd's sign-off setup slack stays slightly negative.
+- `sb_sram_256x8` (`make abstract`): passes; setup +3.68 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
+- tile (four macros, 65 MHz): every stage passes; setup +1.08 ns (Track A +1.02 ns), hold +0.02 ns; 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes about 12 minutes.
 - Not yet: IR drop (needs a rail analysis tool and rail views of the cells).
 
 ## First run checklist
@@ -109,7 +115,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 10. `make finish`: `final_lvs.v` has power pins and the tap and filler cells, `final.v` has neither; `final_logic.v` also has no `diode_2` cells and `finish.log` has no `final_logic.v keeps the antenna diodes` warning (`write_verilog -exclude diode_cells`); `extract.log` maps every LEF layer; `signoff_ss.rpt` shows every net annotated.
 11. `make gds`: `write_gds` accepts the layer map, and the GDS has pin labels on datatype 5 (met1 = 68/5), which KLayout LVS reads. If LVS fails on pins, run `make lvs GDS_TOOL=klayout` to tell a layer-map problem from a netlist problem.
 12. `make drc lvs`: 0 violations, netlists match.
-13. Compare `build/gcd/<variant>/*.json` with Track A, then recalibrate the clock at ss and update `constraint.sdc` and this page.
+13. Compare `build/gcd/<variant>/*.json` with Track A. The gcd clock is 6.2 ns, recalibrated at ss on the first run (Track A's 6 ns missed ss by 0.11 ns); recalibrate again if your tools differ, and update `constraint.sdc` and this page.
 14. `make abstract DESIGN=sb_sram_256x8`: `floorplan.log` has no `create_terminal` error and `abstract.log` passes the LEF check (VDD and VSS pins on met4); `abstract/<top>_<corner>.lib` has bus pins and the cell `sb_sram_256x8`; `abstract_ndm.log` has no `check_workspace` errors (the LEF and `.db` pins agree).
 15. `make floorplan DESIGN=tile`: the macros link from the `.ndm`; `floorplan.rpt` shows no floating macro power pins (`check_pg_connectivity`), met4 straps and rails stop at the macros and met5 crosses them; `macro_place.tcl` placed four macros.
 16. `make lvs DESIGN=tile`: `write_gds` merges the macro GDS; netlists match. If not, try `GDS_TOOL=klayout` on the macro (`make abstract DESIGN=sb_sram_256x8 GDS_TOOL=klayout`) and on the tile.

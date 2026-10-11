@@ -37,7 +37,9 @@ if {[link] eq "0"} { error "link could not resolve every instance (see the LINK 
 if {$flatten} { ungroup -all -flatten }
 
 # --- 3. constraints and checks before compile ---
-if {[read_sdc $sdc] eq "0"} { error "read_sdc $sdc failed" }
+# source, not read_sdc: read_sdc in Design Compiler accepts only SDC commands and skips the others with an
+# error but still returns 1 (remove_from_collection: CMD-005, so no input delays); source stops on any error
+source -echo $sdc
 sb_report synth_check_design.rpt { check_design }
 sb_report synth_check_timing.rpt { check_timing }
 
@@ -77,7 +79,14 @@ write -format ddc -hierarchy -output synth.ddc
 write_sdc synth.sdc
 set_svf -off
 
-set area [sb_try { get_attribute [current_design] area }]
+# cell area: a design has no area attribute in Design Compiler (UID-101), so sum the leaf cells
+set area [sb_try {
+    set a 0.0
+    foreach_in_collection cell [get_cells -hierarchical -filter "is_hierarchical == false"] {
+        set a [expr {$a + [get_attribute $cell area]}]
+    }
+    format %.2f $a
+}]
 sb_note "$top at [file rootname [file tail $cell_db]]: area $area um2, [sizeof_collection $latches] latch(es) -> netlist.v"
 if {![file exists netlist.v]} { error "no netlist.v written" }
 if {[sizeof_collection $latches] > 0} { error "the netlist has latches (synth_latches.rpt)" }

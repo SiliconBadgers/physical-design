@@ -14,7 +14,7 @@ if {[catch {source -echo $::env(SCRIPTS)/icc2/antenna.tcl} msg]} {
 }
 app_option route.detail.antenna true
 app_option route.detail.insert_diodes_during_routing true
-app_option route.detail.diode_libcell_names [get_object_name [get_lib_cells */$::env(DIODE_CELL)]]
+app_option route.detail.diode_libcell_names $::env(DIODE_CELL)   ;# the cell name without the library name
 
 # track assignment and detailed route (violations per iteration are in the log), then timing repair
 route_track

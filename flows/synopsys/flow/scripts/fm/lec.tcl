@@ -9,8 +9,8 @@ set top   $::env(TOP)
 set step  $::env(LEC_STEP)                    ;# synth or route
 set stage $::env(SB_STAGE)                    ;# report and summary name
 set rpt   $::env(OUT_DIR)/$stage              ;# report path prefix
-set impl  $::env(IMPL_NETLIST)                ;# gate netlist checked against the reference
-set ref   [expr {$step eq "synth" ? "RTL" : [file tail $::env(REF_NETLIST)]}]
+set impl_v  $::env(IMPL_NETLIST)              ;# gate netlist checked against the reference (impl and ref are read-only in Formality)
+set ref_v   [expr {$step eq "synth" ? "RTL" : [file tail $::env(REF_NETLIST)]}]
 file delete -force ${rpt}_analyze.rpt         ;# written again only when the check fails
 
 # --- 1. setup and libraries ---
@@ -32,11 +32,11 @@ if {$step eq "synth"} {
 } else {
     set ok [read_verilog -r $::env(REF_NETLIST)]
 }
-if {$ok eq "0"} { error "reading the reference ($ref) failed (see the messages above)" }
+if {$ok eq "0"} { error "reading the reference ($ref_v) failed (see the messages above)" }
 if {[set_top r:/WORK/$top] eq "0"} { error "set_top r:/WORK/$top failed" }
 
 # --- 3. implementation: the gate netlist ---
-if {[read_verilog -i $impl] eq "0"} { error "read_verilog $impl failed" }
+if {[read_verilog -i $impl_v] eq "0"} { error "read_verilog $impl_v failed" }
 if {[set_top i:/WORK/$top] eq "0"} { error "set_top i:/WORK/$top failed" }
 
 # --- 4. pair compare points by name (ports, flip-flops, black-box pins), then prove each pair ---
@@ -47,7 +47,7 @@ set result [verify]
 sb_report ${rpt}_failing.rpt { report_failing_points }
 if {$result ne "1"} {
     sb_report ${rpt}_analyze.rpt { analyze_points -failing }
-    sb_note "$stage: FAIL ($ref vs [file tail $impl]) -> ${rpt}_failing.rpt"
+    sb_note "$stage: FAIL ($ref_v vs [file tail $impl_v]) -> ${rpt}_failing.rpt"
     error "not equivalent: read ${rpt}_failing.rpt and ${rpt}_analyze.rpt"
 }
-sb_note "$stage: PASS ($ref vs [file tail $impl])"
+sb_note "$stage: PASS ($ref_v vs [file tail $impl_v])"

@@ -15,7 +15,7 @@ set_app_var link_path   [concat * $::env(CELL_DB) [env_or MACRO_DBS ""]]
 read_verilog $::env(NETLIST)
 current_design $top
 if {[link_design $top] eq "0"} { error "link_design $top failed" }
-if {[read_sdc $::env(SDC_FILE)] eq "0"} { error "read_sdc failed" }
+source -echo $::env(SDC_FILE)   ;# not read_sdc: it rejects non-SDC commands such as remove_from_collection (CMD-005)
 if {[read_parasitics -format SPEF $::env(SPEF)] eq "0"} { error "read_parasitics $::env(SPEF) failed" }
 
 # clock delays inside the block go into the model; the clock source itself is ideal

@@ -34,6 +34,8 @@ SYNTH_RETIME  ?= 0
 # lint: auto (VC SpyGlass if installed), vc or vcs
 LINT_TOOL     ?= auto
 WAVES         ?= 0
+# wall-clock limit of one sim or gls run in seconds; a normal run takes well under a minute
+SIM_TIMEOUT ?= 900
 # extra VCS compile options for gate-level simulation
 GLS_VCS_ARGS  ?=
 
@@ -111,12 +113,16 @@ FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
 RUN_DEPS  := $(SCRIPTS)/util/run.tcl $(SCRIPTS)/util/metrics.tcl
 
 # $(call snps,<stage>,<shell>,<script>,<env file>): run a Tcl script in a Synopsys shell from the build directory;
-# the stage passed when run.tcl wrote <stage>.done
+# the stage passed when run.tcl wrote <stage>.done and the log has no "Error:" line (check_log.sh, with its waivers):
+# some commands print an Error and return normally (write_gds, create_terminal, read_sdc in Design Compiler).
+# A failing stage leaves no <stage>.done; .DELETE_ON_ERROR removes the file it was making.
 snps = cd $(BUILD) && rm -f $(1).done && source $(4) && \
   SB_SCRIPT=$(3) SB_STAGE=$(1) $(TIMED) $(1) $(2) -f $(SCRIPTS)/util/run.tcl < /dev/null > $(1).log 2>&1 || true; \
   grep '^SB:' $(BUILD)/$(1).log || true; \
   test -f $(BUILD)/$(1).done || { grep -m5 '^Error' $(BUILD)/$(1).log || true; \
-    echo "$(1) FAILED -- read $(BUILD)/$(1).log from the first Error"; exit 1; }
+    echo "$(1) FAILED -- read $(BUILD)/$(1).log from the first Error"; exit 1; }; \
+  $(SCRIPTS)/util/check_log.sh $(BUILD)/$(1).log || { rm -f $(BUILD)/$(1).done; \
+    echo "$(1) FAILED -- the tool went on after an Error: read $(BUILD)/$(1).log from the first Error"; exit 1; }
 
 # --- targets ---
 .PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean FORCE
@@ -192,7 +198,7 @@ $(BUILD)/lint.log: $(RTL_FILES) $(MACRO_VERILOG) $(FLOW_DEPS) $(SCRIPTS)/lint/ru
 
 # --- sim (cocotb on the RTL, VCS) ---
 $(BUILD)/results.xml: $(RTL_FILES) $(MACRO_SIM_MODELS) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py | $(BUILD)
-	$(TIMED) sim python3 $(SCRIPTS)/sim/run_cocotb.py --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
+	$(TIMED) sim python3 $(SCRIPTS)/sim/run_cocotb.py --timeout $(SIM_TIMEOUT) --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
 	  --build-dir $(BUILD)/sim_rtl --results $@ --waves $(WAVES) \
 	  $(addprefix --incdir ,$(RTL_INCDIRS)) $(addprefix --define ,$(RTL_DEFINES)) \
 	  --sources $(RTL_FILES) $(MACRO_SIM_MODELS) $(TB_SOURCES) 2>&1 | tee $(BUILD)/sim.log
@@ -289,6 +295,8 @@ $(BUILD)/final.spef: $(BUILD)/finish.done $(BUILD)/pnr.env $(SCRIPTS)/starrc/run
                      $(SCRIPTS)/starrc/starrc.cmd.in $(NXTGRD)
 	cd $(BUILD) && source pnr.env && $(TIMED) extract bash $(SCRIPTS)/starrc/run_starrc.sh > extract.log 2>&1 || \
 	  { tail -5 $(BUILD)/extract.log; echo "extract FAILED -- read $(BUILD)/extract.log"; exit 1; }
+	@$(SCRIPTS)/util/check_log.sh $(BUILD)/extract.log '^ERROR' || \
+	  { echo "extract FAILED -- StarRC went on after an ERROR: read $(BUILD)/extract.log"; exit 1; }
 	@grep '^SB:' $(BUILD)/extract.log || true
 
 $(BUILD)/signoff_%.env: FORCE | $(BUILD)
@@ -319,7 +327,7 @@ $(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(MACRO_LEFS) $(MACRO
 	  -r $(SCRIPTS)/klayout/gds.py > gds.log 2>&1 || { tail -5 gds.log; exit 1; }
 	$(pin_metal)
 else ifeq ($(GDS_TOOL),icc2)
-$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(PNR_DEPS) $(MACRO_GDS) $(SCRIPTS)/icc2/gds.tcl
+$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(PNR_DEPS) $(MACRO_GDS) $(GDS_MAP) $(SCRIPTS)/icc2/gds.tcl
 	@$(call pnr_stage,gds)
 	$(pin_metal)
 else
@@ -372,7 +380,7 @@ lec-mutation: macros $(BUILD)/lec_synth.env $(BUILD)/lec_route.env $(BUILD)/synt
 # --- gls (cocotb on the routed logic netlist, VCS): cell models; hard macros as their routed netlists ---
 $(BUILD)/gls_results.xml: $(BUILD)/finish.done $(CELL_VERILOG) $(MACRO_NETLISTS) $(TB_SOURCES) $(wildcard $(TB_DIR)/*.py) \
                           $(FLOW_DEPS) $(SCRIPTS)/sim/run_cocotb.py | $(BUILD)
-	$(TIMED) gls python3 $(SCRIPTS)/sim/run_cocotb.py --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
+	$(TIMED) gls python3 $(SCRIPTS)/sim/run_cocotb.py --timeout $(SIM_TIMEOUT) --toplevel $(TOP) --test-module $(TB_MODULE) --test-dir $(TB_DIR) \
 	  --build-dir $(BUILD)/sim_gls --results $@ --waves $(WAVES) \
 	  $(foreach d,$(GLS_DEFINES),--define '$(d)') $(addprefix --vcs-arg=,$(GLS_VCS_ARGS)) \
 	  --sources $(BUILD)/final_logic.v $(CELL_VERILOG) $(MACRO_NETLISTS) $(TB_SOURCES) 2>&1 | tee $(BUILD)/gls.log

@@ -18,7 +18,7 @@ set_app_var link_path   [concat * $::env(CELL_DB) [env_or MACRO_DBS ""]]   ;# ce
 read_verilog $::env(NETLIST)
 current_design $top
 if {[link_design $top] eq "0"} { error "link_design $top failed" }
-if {[read_sdc $::env(SDC_FILE)] eq "0"} { error "read_sdc failed" }
+source -echo $::env(SDC_FILE)   ;# not read_sdc: it rejects non-SDC commands such as remove_from_collection (CMD-005)
 if {$spef ne ""} {
     set_propagated_clock [all_clocks]   ;# clock arrival from the built tree
     if {[read_parasitics -format SPEF $spef] eq "0"} { error "read_parasitics $spef failed" }
@@ -33,10 +33,10 @@ if {$spef ne ""} {
     sb_section $rpt "Annotated parasitics (every net should be annotated)" { report_annotated_parasitics -check }
 }
 sb_section $rpt "Setup (max delay): 10 worst paths" {
-    report_timing -delay_type max -max_paths 10 -nosplit -input_pins -nets -transition_time -capacitance -significant_digits 3
+    report_timing -delay_type max -max_paths 10 -slack_lesser_than infinity -nosplit -input_pins -nets -transition_time -capacitance -significant_digits 3
 }
 sb_section $rpt "Hold (min delay): 10 worst paths" {
-    report_timing -delay_type min -max_paths 10 -nosplit -input_pins -nets -transition_time -capacitance -significant_digits 3
+    report_timing -delay_type min -max_paths 10 -slack_lesser_than infinity -nosplit -input_pins -nets -transition_time -capacitance -significant_digits 3
 }
 sb_section $rpt "Slack summary: WNS, TNS, violating paths" { report_global_timing }
 sb_section $rpt "All violators: setup, hold, slew, capacitance, fanout" { report_constraint -all_violators -nosplit }
@@ -61,5 +61,5 @@ sb_json $out/$name.json [list \
 set role {}
 if {$corner in [env_or SETUP_CORNERS ss]} { lappend role setup }
 if {$corner in [env_or HOLD_CORNERS ff]}  { lappend role hold }
-if {![llength $role]} { set role "report only" }
+if {![llength $role]} { set role [list "report only"] }
 sb_note "$name ([join $role " and "]): setup WS $setup_ws ns ($setup_n failing), hold WS $hold_ws ns ($hold_n failing) -> $name.rpt"

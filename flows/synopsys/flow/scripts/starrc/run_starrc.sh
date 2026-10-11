@@ -33,12 +33,13 @@ sed -e "s|@TOP@|$TOP|" \
     -e "s|@NXTGRD@|$NXTGRD|" \
     -e "s|@MAP@|$dir/layers.map|" \
     -e "s|@SPEF@|$out/final.spef|" \
-    -e "s|@SUMMARY@|$dir/summary.txt|" \
+    -e "s|@SUMMARY@|summary.txt|" \
     -e "s|@STAR_DIR@|$dir/star|" \
     -e "s|@CORES@|${CORES:-4}|" \
     "$here/starrc.cmd.in" > "$dir/starrc.cmd"
 
 rm -f "$out/final.spef"
+# StarRC runs in starrc/; SUMMARY_FILE must be a path relative to it (SX-3978)
 cd "$dir"
 "${STARRC:-StarXtract}" -clean starrc.cmd
 test -s "$out/final.spef" || { echo "Error: StarRC wrote no $out/final.spef"; exit 1; }

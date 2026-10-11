@@ -6,7 +6,7 @@ source $::env(SCRIPTS)/icc2/common.tcl
 open_stage place cts
 
 # clock wires on MIN_CLK_ROUTING_LAYER and above (thicker, less resistance)
-set_clock_routing_rules -min_routing_layer $::env(MIN_CLK_ROUTING_LAYER) -max_routing_layer $::env(MAX_ROUTING_LAYER)
+set_clock_routing_rules -default_rule -min_routing_layer $::env(MIN_CLK_ROUTING_LAYER) -max_routing_layer $::env(MAX_ROUTING_LAYER)
 
 # build and route the clock tree
 clock_opt -to route_clock

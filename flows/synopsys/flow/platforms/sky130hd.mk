@@ -34,7 +34,8 @@ NXTGRD   := $(VIEWS)/skywater130.nominal.nxtgrd
 
 # --- technology and cell files ---
 TECH_FILE := $(TECH)/$(LIBRARY).tf
-GDS_MAP   := $(TECH)/skywater130_fd_sc_hd.map
+# IC Compiler II layer map for write_gds (skywater130_fd_sc_hd.map is a by-name map that write_gds rejects)
+GDS_MAP   := $(TECH)/sky130_fd_sc_hd.icc2_gds.map
 TECH_LEF  := $(CELLS)/lef/$(LIBRARY).tlef
 CELL_LEF  := $(CELLS)/lef/$(LIBRARY).lef
 CELL_GDS  := $(CELLS)/gds/$(LIBRARY).gds
