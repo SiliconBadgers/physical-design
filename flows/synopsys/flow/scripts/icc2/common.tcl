@@ -138,6 +138,10 @@ proc setup_scenarios {} {
         set_voltage 0.0 -object_list [get_supply_nets VSS]
         set_temperature $::env(TEMP_$c)
         source -echo $::env(SDC_FILE)   ;# not read_sdc: it rejects non-SDC commands such as remove_from_collection
+        # no I/O clock latency update after CTS. By default IC Compiler II (compute_clock_latency) gives the clock at the
+        # I/O ports the clock tree's latency, so it captures the output paths that much later than PrimeTime, which reads
+        # the plain SDC (no latency at the port): gcd's outputs looked 0.26 ns (tt) to 0.43 ns (ss) better than sign-off
+        set_latency_adjustment_options -exclude_clocks [all_clocks]
         pnr_setup_margin
         set_scenario_status func_$c -active true \
             -setup [sb_bool [expr {$c in $::SETUP_CORNERS}]] \

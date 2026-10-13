@@ -21,6 +21,11 @@ sb_try create_route_type -name clk_route \
 sb_try set_db cts_route_type_trunk clk_route
 sb_try set_db cts_route_type_leaf  clk_route
 
+# no I/O latency update after CTS. By default CCOpt then puts minus the tree's latency as source latency on the clock
+# port, so the flip-flops' clock arrives at 0 while the I/O delays keep theirs: Innovus saw gcd's output paths 0.20 ns
+# (tt) better than Tempus, which reads the plain SDC. (Old name, still taken with a warning: cts_update_io_latency.)
+set_db cts_update_clock_latency false
+
 # build the tree; setup and hold repair unless switched off
 create_clock_tree_spec
 if {[env_or SKIP_CTS_REPAIR_TIMING 0]} {
