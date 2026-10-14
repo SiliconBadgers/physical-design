@@ -7,7 +7,9 @@
 SB_PDK   ?= $(abspath $(SB_ROOT)/../silicon-badgers-sky130-pdk)
 LIBRARY  := sky130_fd_sc_hd
 SNPS_DIR := $(SB_PDK)/synopsys
-VIEWS    := $(SNPS_DIR)/views
+# views built by $(SNPS_DIR)/make_views.sh; SB_VIEWS=<folder> uses views built elsewhere (for example a mentor's copy)
+SB_VIEWS ?= $(SNPS_DIR)/views
+VIEWS    := $(SB_VIEWS)
 CELLS    := $(SNPS_DIR)/$(LIBRARY)
 TECH     := $(SNPS_DIR)/tech
 OPEN_DIR := $(SB_PDK)/open/sky130hd

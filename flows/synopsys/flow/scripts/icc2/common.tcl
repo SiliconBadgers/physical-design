@@ -7,7 +7,7 @@ source $::env(SCRIPTS)/util/metrics.tcl
 
 set TOP           $::env(TOP)
 set OUT           $::env(OUT_DIR)
-set CORNERS       $::env(CORNERS)         ;# one scenario per corner
+set CORNERS       $::env(CORNERS)         ;# every corner of the PDK
 set SETUP_CORNERS $::env(SETUP_CORNERS)   ;# corners checked and fixed for setup
 set HOLD_CORNERS  $::env(HOLD_CORNERS)    ;# corners checked and fixed for hold
 set_host_options -max_cores [env_or CORES 4]
@@ -131,11 +131,15 @@ proc setup_scenarios {} {
     # corner the NDM has no OC for, so creating an unused ss/ff scenario breaks place_opt. Each corner's
     # voltage and temperature are still bound explicitly below, so tt sign-off is unaffected.
     set sta_corners [lsort -unique [concat $::SETUP_CORNERS $::HOLD_CORNERS]]
-    foreach c $sta_corners {
+    # PNR_DRV_CORNERS: more corners, checked and fixed for max transition and capacitance only (no setup or hold).
+    # Empty by default (see above). With "ss tt ff" on views whose NDM has every corner, as on CAE, the tile signed
+    # off 0.7 to 1.0 ns better at tt and sb_sram_256x8 0.55 ns better than with the sign-off corners alone.
+    set pnr_corners [lsort -unique [concat $sta_corners [env_or PNR_DRV_CORNERS ""]]]
+    foreach c $pnr_corners {
         create_corner $c
         create_scenario -name func_$c -mode func -corner $c
     }
-    foreach c $sta_corners {
+    foreach c $pnr_corners {
         current_scenario func_$c
         set_parasitic_parameters -early_spec nominal -late_spec nominal
         set_process_number 1.0

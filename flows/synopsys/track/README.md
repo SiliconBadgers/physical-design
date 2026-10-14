@@ -20,9 +20,9 @@ Assumed versions: the V-2023.12 releases or newer of Design Compiler, PrimeTime,
 
 ## Setup
 
-- Load the Synopsys tools the way your site does it, then check: `which dc_shell pt_shell icc2_shell StarXtract fm_shell vcs klayout`.
+- Load the Synopsys tools the way your site does it, then check: `which dc_shell pt_shell icc2_shell StarXtract fm_shell vcs klayout`. On the UW CAE Linux machines follow [cae.md](cae.md) instead: the tool container, and a script that installs KLayout and Python and fixes StarRC.
 - Clone the PDK repo next to this repo under that folder name (`git clone <PDK repo URL> silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `synopsys/` folder, the DRC and LVS decks in `open/sky130hd/` and the cell simulation models in `open/verilog/`.
-- Build the Synopsys views once per PDK checkout: `$SB_PDK/synopsys/make_views.sh`. It writes `synopsys/views/`: three `.db` files (ss, tt, ff), the `.tluplus` and `.nxtgrd` RC tables and `sky130_fd_sc_hd.ndm`. Without them `make synth` and later stages stop with this instruction. `make info` shows whether they are there.
+- Build the Synopsys views once per PDK checkout: `$SB_PDK/synopsys/make_views.sh`. It writes `synopsys/views/`: three `.db` files (ss, tt, ff), the `.tluplus` and `.nxtgrd` RC tables and `sky130_fd_sc_hd.ndm`. Without them `make synth` and later stages stop with this instruction. `make info` shows whether they are there. To use views built elsewhere (for example a mentor's copy), set `SB_VIEWS` to that folder.
 - `pip install cocotb==2.1.0` for `make sim` and `make gls`.
 
 ## Run
@@ -45,7 +45,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `all` | | every stage above (not `abstract`) |
 | `lec-mutation` | Formality | both LEC steps must fail on broken netlists (`lec_mutation/`) |
 
-- Sign-off corners: `tt` for setup and hold by default (`SETUP_CORNERS=tt`, `HOLD_CORNERS=tt`), like track A, so the metrics compare. IC Compiler II fixes setup and hold in those scenarios.
+- Sign-off corners: `tt` for setup and hold by default (`SETUP_CORNERS=tt`, `HOLD_CORNERS=tt`), like track A, so the metrics compare. IC Compiler II has a scenario for each sign-off corner and fixes setup and hold there; `PNR_DRV_CORNERS` adds scenarios where it fixes only max transition and capacitance.
 - `finish.json` gets its timing from PrimeTime with the StarRC parasitics (worst over the corners); area and utilization come from IC Compiler II. A value a script could not read is `null`.
 - `final_logic.v` is `final.v` (the PrimeTime netlist) without antenna diodes: the logic netlist for LEC and GLS. LVS uses `final_lvs.v`.
 - `lec_route` uses no SVF: IC Compiler II keeps the flip-flop, port and macro instance names of `netlist.v`, and Formality pairs those by name; the buffers, resized cells, swapped pins and tie cells from place and route sit inside the logic cones between them.
@@ -54,12 +54,14 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 | Variable | Default | |
 |---|---|---|
+| `SB_PDK`, `SB_VIEWS` | `../silicon-badgers-sky130-pdk`, `$SB_PDK/synopsys/views` | the PDK repo; the folder with its Synopsys views (`make_views.sh` output) |
 | `SETUP_CORNERS`, `HOLD_CORNERS` | `tt`, `tt` | sign-off corners: `ss`, `tt` or `ff` |
 | `CORE_UTILIZATION` `ASPECT_RATIO` `CORE_MARGIN` `PLACE_DENSITY` | `design.mk` | floorplan and placement |
 | `CTS_BUF_LIST` | `clkbuf_4 clkbuf_8 clkbuf_16` | cells the clock tree may use; empty = the tool picks |
 | `GPL_TIMING_DRIVEN`, `GPL_ROUTABILITY_DRIVEN` | `1` | `create_placement -timing_driven`, `-congestion` |
 | `SKIP_CTS_REPAIR_TIMING` | `0` | `1` = no setup and hold repair after the clock tree |
 | `PNR_SETUP_MARGIN` | `0.15` | ns of setup clock uncertainty IC Compiler II adds to the SDC's in every scenario, for every design; Design Compiler and PrimeTime read the SDC as it is. IC Compiler II (TLU+) sees up to 0.15 ns more setup slack than PrimeTime with StarRC, so without it a design can close in place and route and miss sign-off |
+| `PNR_DRV_CORNERS` | `ss tt ff` | more corners IC Compiler II checks and fixes for max transition and capacitance only. The cell NDM must have those corners. Set it empty (only the sign-off corners) if your IC Compiler II release stops in `place_opt` with OPT-045; the tile then signs off 0.7 to 1.0 ns worse at tt, `sb_sram_256x8` 0.55 ns |
 | `IO_CONSTRAINTS`, `PDN_TCL` | none, `flow/scripts/icc2/pdn.tcl` | pin constraints and power grid (IC Compiler II Tcl) |
 | `DC_COMPILE` `SYNTH_FLATTEN` `SYNTH_RETIME` | `compile_ultra` `1` `0` | synthesis |
 | `GDS_TOOL` | `icc2` | `klayout` merges `final.def` with the cell GDS instead of `write_gds` |
@@ -95,12 +97,12 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 ## Status
 
-- Run on Synopsys tools (CAE lab, 2026-10-12): Design Compiler, PrimeTime, Formality, Library Compiler and VCS Y-2026.03, IC Compiler II X-2025.06-SP3, StarRC 2026.03, KLayout 0.30.12; `lint` with VCS (no VC SpyGlass there). Needs a PDK with the IC Compiler II GDS layer map (`synopsys/tech/sky130_fd_sc_hd.icc2_gds.map`), the tap and fill cells in the NDM (PR #1) and the met1-met3 hole-area rules in the `.tf`.
+- Run on Synopsys tools (CAE lab, 2026-10-13, from fresh clones set up as in [cae.md](cae.md), with `PNR_DRV_CORNERS="ss tt ff"`): Design Compiler, PrimeTime, Formality, Library Compiler and VCS Y-2026.03, IC Compiler II X-2025.06-SP3, StarRC 2026.03, KLayout 0.30.12; `lint` with VCS (no VC SpyGlass there). Needs a PDK with the IC Compiler II GDS layer map (`synopsys/tech/sky130_fd_sc_hd.icc2_gds.map`), the tap and fill cells in the NDM (PR #1) and the met1-met3 hole-area rules in the `.tf`.
 - gcd (6.2 ns, tt): every stage passes; 0 DRC, LVS match, LEC passes, GLS 2/2, `lec-mutation` 4/4. Sign-off setup +0.16 ns (worst path to the output `resp_msg[15]`; register paths +0.20 ns), hold +0.50 ns.
-- gcd full signoff (`SETUP_CORNERS=ss HOLD_CORNERS=ff`): every stage passes; ss setup +0.03 ns, ff hold +0.36 ns. At 6.0 ns (Track A's clock) it also signs off, but ss by only about 0.005 ns, so the clock stays 6.2 ns.
+- gcd full signoff (`SETUP_CORNERS=ss HOLD_CORNERS=ff`): every stage passes; ss setup +0.07 ns, ff hold +0.36 ns. At 6.0 ns (Track A's clock) it also signs off, but ss by only about 0.005 ns, so the clock stays 6.2 ns.
 - The clock tree (one buffer: `clk` has a driving cell) adds 0.26 ns (tt) to 0.43 ns (ss) of clock latency. By default IC Compiler II would then give the I/O ports that latency too (`compute_clock_latency` after CTS), while PrimeTime reads the plain SDC, so the output paths passed in place and route and failed sign-off by up to 0.34 ns. `setup_scenarios` turns that off (`set_latency_adjustment_options -exclude_clocks [all_clocks]`), so both time the I/O paths alike; `PNR_SETUP_MARGIN` covers the TLU+/StarRC difference on the register paths.
-- `sb_sram_256x8` (`make abstract`): passes; setup +3.98 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
-- tile (four macros, 65 MHz): every stage passes; setup +1.01 ns (Track A +1.02 ns), hold +0.09 ns (+0.02 to +0.31 ns in earlier builds: it moves with the clock tree); 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes 9 to 12 minutes.
+- `sb_sram_256x8` (`make abstract`): passes; setup +3.97 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
+- tile (four macros, 65 MHz): every stage passes; setup +0.94 ns (Track A +1.02 ns), hold +0.29 ns (+0.02 to +0.36 ns in other builds: it moves with the clock tree); with `PNR_DRV_CORNERS` empty setup is only +0.05 to +0.37 ns; 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes 9 to 12 minutes.
 - Not yet: IR drop (needs a rail analysis tool and rail views of the cells).
 
 ## First run checklist
@@ -108,7 +110,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 1. `make info` finds the views; `make synth`: `dc_shell` exits by itself, `synth.log` has no `Error`, `synth_latches.rpt` says 0 and `synth_loops.rpt` is a loop report (`report_timing -loops`).
 2. Design Compiler, PrimeTime and IC Compiler II read `constraint.sdc` without errors (it uses `remove_from_collection`).
 3. `make sta`: `sta_ss.json` and `sta_ff.json` have numbers, not `null` (`get_timing_paths -slack_lesser_than`).
-4. `make floorplan`: the `SB: rows use site` line names the cells' site; `scenarios.rpt` shows each scenario on its corner's library (picked by `set_voltage` and `set_temperature`); `read_parasitic_tech` maps met1 to met5 without warnings.
+4. `make floorplan`: the `SB: rows use site` line names the cells' site; `scenarios.rpt` has a scenario for each sign-off corner and each `PNR_DRV_CORNERS` corner, each on its corner's library (picked by `set_voltage -corners` and `set_temperature`); `read_parasitic_tech` maps met1 to met5 without warnings.
 5. Any `SB: warning: app option ... not set` line: the option has another name in your release. Fix it in the stage script.
 6. `ASPECT_RATIO=2` gives a core twice as tall as wide; if it is twice as wide, swap the `-side_ratio` numbers in `floorplan.tcl`.
 7. `floorplan.json` core area and utilization match `report_utilization` in `floorplan.rpt` (`get_core_area` boundary; instance area counts tap cells, not fillers, as OpenROAD does).

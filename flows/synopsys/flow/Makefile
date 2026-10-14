@@ -75,6 +75,9 @@ SKIP_CTS_REPAIR_TIMING ?= 0
 # ns of setup clock uncertainty IC Compiler II adds to the SDC's, in every scenario (place and route only: Design Compiler
 # and PrimeTime read the SDC as it is). IC Compiler II with TLU+ sees up to 0.15 ns more setup slack than sign-off.
 PNR_SETUP_MARGIN ?= 0.15
+# more corners IC Compiler II checks and fixes for max transition and capacitance only (default: every corner);
+# empty: only the sign-off corners, for IC Compiler II releases that stop in place_opt with OPT-045 on these scenarios
+PNR_DRV_CORNERS  ?= ss tt ff
 # lint black boxes and simulation models of the hard macros
 MACRO_VERILOG    ?=
 MACRO_SIM_MODELS ?=
@@ -97,7 +100,7 @@ MACRO_FILES   := $(MACRO_LEFS) $(MACRO_GDS) $(MACRO_CDL) $(MACRO_DBS) $(MACRO_ND
 MACRO_HALO    ?= 10
 MACRO_CHANNEL ?= 80
 
-ifneq ($(filter-out $(CORNERS),$(SETUP_CORNERS) $(HOLD_CORNERS) $(SYNTH_CORNER)),)
+ifneq ($(filter-out $(CORNERS),$(SETUP_CORNERS) $(HOLD_CORNERS) $(SYNTH_CORNER) $(PNR_DRV_CORNERS)),)
   $(error corners must be among: $(CORNERS))
 endif
 # corners PrimeTime runs: every setup and hold corner
@@ -142,7 +145,7 @@ help:
 
 info:
 	@echo "DESIGN=$(DESIGN) TOP=$(TOP) SDC=$(SDC_FILE) period=$(CLOCK_PERIOD_NS) ns"
-	@echo "PDK=$(SB_PDK) views: $(if $(wildcard $(VIEWS)),$(VIEWS),MISSING (run $(SNPS_DIR)/make_views.sh))"
+	@echo "PDK=$(SB_PDK) views: $(if $(wildcard $(VIEWS)),$(VIEWS),MISSING (run $(SNPS_DIR)/make_views.sh or set SB_VIEWS))"
 	@echo "corners: synth $(SYNTH_CORNER), setup $(SETUP_CORNERS), hold $(HOLD_CORNERS)"
 	@echo "BUILD=$(BUILD)"
 
@@ -173,7 +176,7 @@ CMDLINE_VARS = $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v
 macros:
 	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(CMDLINE_VARS)) \
 	  $(MAKE) $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) \
-	  --no-print-directory -C $(SB_ROOT) abstract DESIGN=$(m) VARIANT=$(MACRO_VARIANT) SB_PDK=$(SB_PDK) CORES=$(CORES) \
+	  --no-print-directory -C $(SB_ROOT) abstract DESIGN=$(m) VARIANT=$(MACRO_VARIANT) SB_PDK=$(SB_PDK) SB_VIEWS=$(SB_VIEWS) CORES=$(CORES) \
 	  DC_SHELL=$(DC_SHELL) PT_SHELL=$(PT_SHELL) ICC2_SHELL=$(ICC2_SHELL) ICC2_LM_SHELL=$(ICC2_LM_SHELL) \
 	  LC_SHELL=$(LC_SHELL) STARRC=$(STARRC) KLAYOUT=$(KLAYOUT) &&) true
 $(MACRO_FILES): ;
@@ -187,7 +190,7 @@ $(BUILD):
 # --- library views: built once on a licensed machine ---
 $(CELL_DBS) $(CELL_NDM) $(TLUPLUS) $(NXTGRD):
 	@echo "missing $@"
-	@echo "build the Synopsys views once: $(SNPS_DIR)/make_views.sh (see track/README.md)"
+	@echo "build the Synopsys views once: $(SNPS_DIR)/make_views.sh, or set SB_VIEWS to a folder that has them (see track/README.md)"
 	@exit 1
 
 # --- lint (VC SpyGlass, or vcs +lint=all) ---
@@ -268,6 +271,7 @@ $(BUILD)/pnr.env: FORCE | $(BUILD)
 	  echo "export PLACE_DENSITY='$(PLACE_DENSITY)'"; \
 	  echo "export GPL_TIMING_DRIVEN='$(GPL_TIMING_DRIVEN)' GPL_ROUTABILITY_DRIVEN='$(GPL_ROUTABILITY_DRIVEN)'"; \
 	  echo "export SKIP_CTS_REPAIR_TIMING='$(SKIP_CTS_REPAIR_TIMING)' PNR_SETUP_MARGIN='$(PNR_SETUP_MARGIN)'"; \
+	  echo "export PNR_DRV_CORNERS='$(PNR_DRV_CORNERS)'"; \
 	  echo "export GDS_MAP='$(GDS_MAP)' CELL_GDS='$(CELL_GDS)'"; \
 	  echo "export STARRC='$(STARRC)' TECH_LEF='$(TECH_LEF)' CELL_LEF='$(CELL_LEF)' NXTGRD='$(NXTGRD)'"; \
 	  $(if $(MACROS),echo "export MACRO_NDMS='$(MACRO_NDMS)' MACRO_LEFS='$(MACRO_LEFS)' MACRO_GDS='$(MACRO_GDS)'";) \
@@ -390,10 +394,11 @@ $(BUILD)/gls_results.xml: $(BUILD)/finish.done $(CELL_VERILOG) $(MACRO_NETLISTS)
 
 # --- abstract: this design as a hard macro of another design ---
 # LEF (IC Compiler II frame), timing model per corner (PrimeTime, compiled by Library Compiler; <top>.lib is tt),
-# GDS, CDL, logic netlist (GLS), and the IC Compiler II reference library built from the LEF and the models
+# GDS, CDL, logic netlist (GLS), and the IC Compiler II reference library built from the LEF and the models;
+# the block passes PrimeTime sign-off first (final.gds no longer waits for it)
 ABS       := $(BUILD)/abstract
 ABS_FILES := $(ABS)/$(TOP).lef $(ABS)/$(TOP).lib $(ABS)/$(TOP).gds $(ABS)/$(TOP).cdl $(ABS)/$(TOP).v $(BUILD)/abstract_ndm.done
-abstract: macros $(ABS_FILES)
+abstract: macros $(BUILD)/signoff.done $(ABS_FILES)
 
 $(ABS):
 	mkdir -p $@
