@@ -8,6 +8,11 @@ open_stage grt route
 app_option route.track.timing_driven true
 app_option route.detail.timing_driven true
 
+# Honor spacing between same-net shapes. By default ICC2 lets shapes of one net sit closer than
+# the rule (it treats them as electrically merged); the sign-off DRC deck is net-agnostic and flags
+# those sub-0.3um met3 gaps as m3.2. Enforcing same-net spacing here keeps the route sign-off clean.
+app_option route.detail.var_spacing_to_same_net true
+
 # antenna rules (antenna.tcl); the router fixes violations with layer jumps or diodes
 if {[catch {source -echo $::env(SCRIPTS)/icc2/antenna.tcl} msg]} {
     sb_note "warning: antenna rules not loaded, antenna check is off: $msg"

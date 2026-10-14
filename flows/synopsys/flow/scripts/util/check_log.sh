@@ -8,8 +8,9 @@ log=$1
 pattern=${2:-'^Error:'}
 
 # Waivers: message IDs whose error lines are harmless in a passing run, one per line, each with the reason.
-# An error line is waived when it contains "(<ID>)". Keep this list short; none is needed so far.
+# An error line is waived when it contains "(<ID>)". Keep this list short.
 waivers=(
+    PT-063  # PrimeTime startup note when Library Compiler is a separate install; STA reads the .db and is unaffected
 )
 
 errors=$(grep -E -- "$pattern" "$log" || true)

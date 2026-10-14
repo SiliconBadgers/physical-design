@@ -9,6 +9,17 @@ set lef $OUT/abstract/$TOP.lef
 file mkdir [file dirname $lef]
 file delete -force $lef
 
+# The parent's power grid joins this block on the met4 straps, which write_lef exports as
+# the block's power and ground pins. A PDN that generates boundary pins (generate_pin)
+# already leaves VDD/VSS terminals; otherwise promote the met4 straps to terminals here as
+# a fallback (with -of_objects, since -port/-object is rejected for a shape already on a net).
+foreach net {VDD VSS} {
+    if {[sizeof_collection [get_terminals -quiet -of_objects [get_ports $net]]]} { continue }
+    set straps [get_shapes -quiet -of_objects [get_nets $net] -filter "layer_name==met4"]
+    if {![sizeof_collection $straps]} { error "no met4 straps on $net: the design's pdn.tcl must route met4 power straps" }
+    create_terminal -of_objects $straps
+}
+
 # every layer the design uses is fully blocked; layers above it stay free for the parent's routing
 create_frame -block_all used_layers
 write_lef -include cell -design $TOP.frame $lef

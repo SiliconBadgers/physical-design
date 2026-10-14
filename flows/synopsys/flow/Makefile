@@ -324,13 +324,13 @@ pin_metal = cd $(BUILD) && $(TIMED) pin_metal $(KLAYOUT) -zz -rd gds=final.gds -
 $(BUILD)/final.gds: $(SCRIPTS)/klayout/pin_metal.py
 
 ifeq ($(GDS_TOOL),klayout)
-$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(MACRO_LEFS) $(MACRO_GDS) $(SCRIPTS)/klayout/gds.py
+$(BUILD)/final.gds: $(BUILD)/finish.done $(BUILD)/gds.env $(MACRO_LEFS) $(MACRO_GDS) $(SCRIPTS)/klayout/gds.py
 	cd $(BUILD) && $(TIMED) gds $(KLAYOUT) -zz -rd in_def=final.def -rd lefs="$(strip $(TECH_LEF) $(CELL_LEF) $(MACRO_LEFS))" \
 	  -rd gds_in="$(strip $(CELL_GDS) $(MACRO_GDS))" -rd lyt=$(KLAYOUT_LYT) -rd top=$(TOP) -rd out=final.gds \
 	  -r $(SCRIPTS)/klayout/gds.py > gds.log 2>&1 || { tail -5 gds.log; exit 1; }
 	$(pin_metal)
 else ifeq ($(GDS_TOOL),icc2)
-$(BUILD)/final.gds: $(BUILD)/signoff.done $(BUILD)/gds.env $(PNR_DEPS) $(MACRO_GDS) $(GDS_MAP) $(SCRIPTS)/icc2/gds.tcl
+$(BUILD)/final.gds: $(BUILD)/finish.done $(BUILD)/gds.env $(PNR_DEPS) $(MACRO_GDS) $(GDS_MAP) $(SCRIPTS)/icc2/gds.tcl
 	@$(call pnr_stage,gds)
 	$(pin_metal)
 else

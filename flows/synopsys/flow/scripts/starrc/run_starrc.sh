@@ -32,9 +32,9 @@ sed -e "s|@TOP@|$TOP|" \
     -e "s|@LEFS@|$TECH_LEF $CELL_LEF${MACRO_LEFS:+ $MACRO_LEFS}|" \
     -e "s|@NXTGRD@|$NXTGRD|" \
     -e "s|@MAP@|$dir/layers.map|" \
-    -e "s|@SPEF@|$out/final.spef|" \
+    -e "s|@SPEF@|../final.spef|" \
     -e "s|@SUMMARY@|summary.txt|" \
-    -e "s|@STAR_DIR@|$dir/star|" \
+    -e "s|@STAR_DIR@|star|" \
     -e "s|@CORES@|${CORES:-4}|" \
     "$here/starrc.cmd.in" > "$dir/starrc.cmd"
 

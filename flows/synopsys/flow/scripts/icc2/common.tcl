@@ -126,16 +126,21 @@ proc setup_scenarios {} {
     remove_scenarios -all
     read_parasitic_tech -tlup $::env(TLUPLUS) -name nominal   ;# one RC table for all corners
     create_mode func
-    foreach c $::CORNERS {
+    # Only the corners actually signed off (setup or hold). The reference NDM carries one operating
+    # condition (tt); older IC Compiler II leaves "used supplies = 0" (OPT-045) for a scenario on a
+    # corner the NDM has no OC for, so creating an unused ss/ff scenario breaks place_opt. Each corner's
+    # voltage and temperature are still bound explicitly below, so tt sign-off is unaffected.
+    set sta_corners [lsort -unique [concat $::SETUP_CORNERS $::HOLD_CORNERS]]
+    foreach c $sta_corners {
         create_corner $c
         create_scenario -name func_$c -mode func -corner $c
     }
-    foreach c $::CORNERS {
+    foreach c $sta_corners {
         current_scenario func_$c
         set_parasitic_parameters -early_spec nominal -late_spec nominal
         set_process_number 1.0
-        set_voltage $::env(VOLT_$c) -object_list [get_supply_nets VDD]
-        set_voltage 0.0 -object_list [get_supply_nets VSS]
+        set_voltage $::env(VOLT_$c) -corners $c -object_list [get_supply_nets VDD]
+        set_voltage 0.0 -corners $c -object_list [get_supply_nets VSS]
         set_temperature $::env(TEMP_$c)
         source -echo $::env(SDC_FILE)   ;# not read_sdc: it rejects non-SDC commands such as remove_from_collection
         # no I/O clock latency update after CTS. By default IC Compiler II (compute_clock_latency) gives the clock at the

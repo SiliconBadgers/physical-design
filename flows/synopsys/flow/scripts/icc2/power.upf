@@ -1,13 +1,19 @@
 # File:        power.upf
 # Author:      Isaac Hagedorn
-# Date:        2026-10-09
-# Description: Power intent for every design in this flow: one power domain fed by the supply ports VDD and VSS.
-
-create_power_domain TOP -include_scope
+# Description: Power intent: one always-on domain, supplies VDD and VSS. A committed
+#              UPF supply with a defined power state gives the voltage area a resolved
+#              voltage, so place_opt counts the supplies as used; a plain create_net +
+#              set_voltage leaves "used supplies = 0" and place_opt reports no usable
+#              buffers (OPT-045). The voltage comes from the port state + commit_upf.
+create_power_domain PD_TOP -include_scope
 create_supply_port VDD
 create_supply_port VSS
-create_supply_net  VDD
-create_supply_net  VSS
+create_supply_net  VDD -domain PD_TOP
+create_supply_net  VSS -domain PD_TOP
 connect_supply_net VDD -ports VDD
 connect_supply_net VSS -ports VSS
-set_domain_supply_net TOP -primary_power_net VDD -primary_ground_net VSS
+set_domain_supply_net PD_TOP -primary_power_net VDD -primary_ground_net VSS
+add_port_state VDD -state {ON 1.8}
+add_port_state VSS -state {ON 0.0}
+create_pst PST_TOP -supplies {VDD VSS}
+add_pst_state RUN -pst PST_TOP -state {ON ON}

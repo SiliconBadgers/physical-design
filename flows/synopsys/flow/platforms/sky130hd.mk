@@ -39,8 +39,11 @@ GDS_MAP   := $(TECH)/sky130_fd_sc_hd.icc2_gds.map
 TECH_LEF  := $(CELLS)/lef/$(LIBRARY).tlef
 CELL_LEF  := $(CELLS)/lef/$(LIBRARY).lef
 CELL_GDS  := $(CELLS)/gds/$(LIBRARY).gds
-# cell simulation models and their defines for gate-level simulation
-CELL_VERILOG := $(SB_PDK)/open/verilog/primitives.v $(SB_PDK)/open/verilog/$(LIBRARY).v
+# cell simulation models and their defines for gate-level simulation. The models ship either in the
+# open area's open/verilog or under synopsys/<lib>/verilog, depending on the PDK checkout; take
+# whichever it provides so GLS runs the same on either layout.
+CELL_VERILOG_DIR := $(firstword $(wildcard $(SB_PDK)/open/verilog $(CELLS)/verilog))
+CELL_VERILOG := $(CELL_VERILOG_DIR)/primitives.v $(CELL_VERILOG_DIR)/$(LIBRARY).v
 GLS_DEFINES  := FUNCTIONAL UNIT_DELAY=\#1
 
 # --- synthesis ---
