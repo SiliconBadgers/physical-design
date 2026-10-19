@@ -1,7 +1,8 @@
 # File:        cts.tcl
 # Author:      Isaac Hagedorn
 # Date:        2026-10-09
-# Description: Clock tree synthesis (CCOpt), then setup and hold repair with real clock arrival times. Writes cts.db.
+# Description: Clock tree synthesis (ccopt_design; clock_opt_design on Innovus 25 and newer), then setup and hold repair
+#              with real clock arrival times. Writes cts.db.
 source $::env(SCRIPTS)/pnr/common.tcl
 sb_open place
 set out $::env(OUT_DIR)
@@ -26,12 +27,22 @@ sb_try set_db cts_route_type_leaf  clk_route
 # (tt) better than Tempus, which reads the plain SDC. (Old name, still taken with a warning: cts_update_io_latency.)
 set_db cts_update_clock_latency false
 
-# build the tree; setup and hold repair unless switched off
-create_clock_tree_spec
-if {[env_or SKIP_CTS_REPAIR_TIMING 0]} {
-    ccopt_design -cts
+# build the tree; setup and hold repair unless switched off. The command depends on the Innovus release:
+# - 25 and newer: clock_opt_design, without create_clock_tree_spec. On the PODv2 database of 25.1 the
+#   create_clock_tree_spec/ccopt_design path stops with IMPCCOPT-2440.
+# - older: create_clock_tree_spec and ccopt_design. 21.x has clock_opt_design only as a beta feature: it builds no tree
+#   and reports no error, so the stage would pass without a clock tree.
+if {[get_db program_major_version] >= 25} {
+    set cts_cmd clock_opt_design
 } else {
-    ccopt_design
+    set cts_cmd ccopt_design
+    create_clock_tree_spec
+}
+puts "SB: cts command $cts_cmd (Innovus [get_db program_version])"
+if {[env_or SKIP_CTS_REPAIR_TIMING 0]} {
+    $cts_cmd -cts
+} else {
+    $cts_cmd
     opt_design -post_cts -hold
 }
 sb_propagate
