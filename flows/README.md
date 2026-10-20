@@ -1,20 +1,23 @@
 # SiliconBadgers PD flow
 
-The team's own RTL-to-GDS scripts, maintained by mentors. Every track branch runs the same stages with one set of tools, so a design can go through any of them and the results can be compared.
+The team's own RTL-to-GDS scripts, maintained by mentors. Every track runs the same stages with one set of tools, so a design can go through any of them and the results can be compared.
 
 ## Tracks
 
-| Track | Tools | Branch |
+| Track | Tools | Folder |
 |---|---|---|
-| A | Open-source: Yosys, OpenROAD, KLayout (reference: OpenROAD-flow-scripts) | `track-a` |
-| B1 | Cadence: Genus, Innovus, Tempus, Quantus, Voltus, Pegasus | `track-b1` |
-| B2 | Synopsys: Design Compiler, IC Compiler II, StarRC, PrimeTime | `track-b2` |
+| A | Open-source: Yosys, OpenROAD, KLayout (reference: OpenROAD-flow-scripts) | [`tracks/a`](tracks/a/track/README.md) |
+| B1 | Cadence: Genus, Innovus, Tempus, Quantus, Voltus, Pegasus | [`tracks/b1`](tracks/b1/track/README.md) |
+| B2 | Synopsys: Design Compiler, IC Compiler II, StarRC, PrimeTime | [`tracks/b2`](tracks/b2/track/README.md) |
+
+Run every command from your track's folder; build output goes to its `build/` folder:
 
 ```
-git checkout track-a       # or track-b1, track-b2
+cd tracks/b2       # or tracks/a, tracks/b1
+make all DESIGN=gcd
 ```
 
-Setup, commands and status for a track: `track/README.md` on its branch.
+Setup, commands and status for a track: `track/README.md` in its folder. [tracks/README.md](tracks/README.md) helps you pick one.
 
 ## Stages
 
@@ -40,7 +43,6 @@ Each stage writes a metrics file with the same key names in every track (for exa
 |---|---|
 | `designs/<name>/rtl/` | the RTL (shared by every track) |
 | `designs/<name>/tb/` | its simulation test |
-
-Each track adds its own config and constraint file next to them.
+| `tracks/<track>/designs/<name>/` | that track's config (`design.mk`) and constraint file for it |
 
 `tile` (the systolic MAC array) places four `sb_sram_256x8` blocks as hard macros. Each track builds `sb_sram_256x8` through the same stages first, then turns it into an abstract (LEF, timing model, GDS, netlist).

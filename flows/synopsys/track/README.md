@@ -2,6 +2,8 @@
 
 The flow on sky130hd with Synopsys tools, and KLayout for DRC and LVS. Same stages, build layout and metric names as Track A, so the two tracks can be compared run for run.
 
+Track B2 is the folder `tracks/b2`. Run every command on these pages from there; paths are relative to it.
+
 ## Tools
 
 | Tool | Command | Used for |
@@ -54,7 +56,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 | Variable | Default | |
 |---|---|---|
-| `SB_PDK`, `SB_VIEWS` | `../silicon-badgers-sky130-pdk`, `$SB_PDK/synopsys/views` | the PDK repo; the folder with its Synopsys views (`make_views.sh` output) |
+| `SB_PDK`, `SB_VIEWS` | `silicon-badgers-sky130-pdk` next to this repo (`../../../silicon-badgers-sky130-pdk` from `tracks/b2`), `$SB_PDK/synopsys/views` | the PDK repo; the folder with its Synopsys views (`make_views.sh` output) |
 | `SETUP_CORNERS`, `HOLD_CORNERS` | `tt`, `tt` | sign-off corners: `ss`, `tt` or `ff` |
 | `CORE_UTILIZATION` `ASPECT_RATIO` `CORE_MARGIN` `PLACE_DENSITY` | `design.mk` | floorplan and placement |
 | `CTS_BUF_LIST` | `clkbuf_4 clkbuf_8 clkbuf_16` | cells the clock tree may use; empty = the tool picks |
@@ -78,7 +80,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `flow/Makefile` | stages and their inputs |
 | `flow/platforms/sky130hd.mk` | PDK files, corners and cells |
 | `flow/scripts/` | one folder per tool: `dc`, `pt`, `icc2`, `starrc`, `lc`, `fm`, `klayout`, `lint`, `sim`; `util/` has the shell wrapper and metrics procs |
-| `designs/<name>/` | `design.mk`, `constraint.sdc` (this track); `rtl/`, `tb/` (shared) |
+| `designs/<name>/` | `design.mk`, `constraint.sdc` (this track); `rtl/`, `tb/` are shared, in `designs/<name>/` at the repo root (`../../designs/<name>/`) |
 
 ## Macros
 
@@ -97,12 +99,12 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 ## Status
 
-- Run on Synopsys tools (CAE lab, 2026-10-13, from fresh clones set up as in [cae.md](cae.md), with `PNR_DRV_CORNERS="ss tt ff"`): Design Compiler, PrimeTime, Formality, Library Compiler and VCS Y-2026.03, IC Compiler II X-2025.06-SP3, StarRC 2026.03, KLayout 0.30.12; `lint` with VCS (no VC SpyGlass there). Needs a PDK with the IC Compiler II GDS layer map (`synopsys/tech/sky130_fd_sc_hd.icc2_gds.map`), the tap and fill cells in the NDM (PR #1) and the met1-met3 hole-area rules in the `.tf`.
-- gcd (6.2 ns, tt): every stage passes; 0 DRC, LVS match, LEC passes, GLS 2/2, `lec-mutation` 4/4. Sign-off setup +0.16 ns (worst path to the output `resp_msg[15]`; register paths +0.20 ns), hold +0.50 ns.
+- Run on Synopsys tools (CAE lab, 2026-10-19, from fresh clones set up as in [cae.md](cae.md), PDK `main` with the open technology files): Design Compiler, PrimeTime, Formality, Library Compiler and VCS Y-2026.03, IC Compiler II X-2025.06-SP3, StarRC 2026.03, KLayout 0.30.12; `lint` with VCS (no VC SpyGlass there). Needs a PDK with the IC Compiler II GDS layer map (`synopsys/tech/sky130_fd_sc_hd.icc2_gds.map`), the tap and fill cells in the NDM (PR #1) and the met1-met3 hole-area rules in the `.tf`.
+- gcd (6.2 ns, tt): every stage passes; 0 DRC, LVS match, LEC passes, GLS 2/2, `lec-mutation` 4/4. Sign-off setup +0.16 ns (worst path to the output `resp_msg[15]`), hold +0.54 ns.
 - gcd full signoff (`SETUP_CORNERS=ss HOLD_CORNERS=ff`): every stage passes; ss setup +0.07 ns, ff hold +0.36 ns. At 6.0 ns (Track A's clock) it also signs off, but ss by only about 0.005 ns, so the clock stays 6.2 ns.
 - The clock tree (one buffer: `clk` has a driving cell) adds 0.26 ns (tt) to 0.43 ns (ss) of clock latency. By default IC Compiler II would then give the I/O ports that latency too (`compute_clock_latency` after CTS), while PrimeTime reads the plain SDC, so the output paths passed in place and route and failed sign-off by up to 0.34 ns. `setup_scenarios` turns that off (`set_latency_adjustment_options -exclude_clocks [all_clocks]`), so both time the I/O paths alike; `PNR_SETUP_MARGIN` covers the TLU+/StarRC difference on the register paths.
-- `sb_sram_256x8` (`make abstract`): passes; setup +3.97 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
-- tile (four macros, 65 MHz): every stage passes; setup +0.94 ns (Track A +1.02 ns), hold +0.29 ns (+0.02 to +0.36 ns in other builds: it moves with the clock tree); with `PNR_DRV_CORNERS` empty setup is only +0.05 to +0.37 ns; 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes 9 to 12 minutes.
+- `sb_sram_256x8` (`make abstract`): passes; setup +3.53 to +3.56 ns; 0 DRC, LVS match, LEC passes, `lec-mutation` 4/4.
+- tile (four macros, 65 MHz): every stage passes; setup +0.43 to +1.06 ns, hold +0.25 to +0.36 ns (Track A +1.02 ns): both move from run to run, because IC Compiler II routes the macro a little differently each time and the tile follows the macro's timing model; with `PNR_DRV_CORNERS` empty, setup was only +0.05 to +0.37 ns (old technology files); 0 DRC, LVS match, LEC passes (the four macros are the only black boxes), GLS 3/3, `lec-mutation` 4/4. KLayout LVS takes 9 to 12 minutes.
 - Not yet: IR drop (needs a rail analysis tool and rail views of the cells).
 
 ## First run checklist
@@ -129,4 +131,4 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 20. `make lec-mutation` on gcd, `sb_sram_256x8` and the tile: 4/4 caught. The script finds instances in the Design Compiler and IC Compiler II spellings (`.A(n1)` and `.A ( n1 )`) and looks for `Verification FAILED` at the start of a line; a `no nand2 cell` or `fewer than two flip-flops` stop means the netlist is spelled another way.
 21. `make gls`: VCS compiles the cell models with `-sverilog` (always set by cocotb's VCS runner), `+define+FUNCTIONAL +define+UNIT_DELAY=#1` and `-timescale=1ns/1ps`, and passes gcd 2/2 and the tile 3/3. If VCS stops in `primitives.v` or `sky130_fd_sc_hd.v`, try options through `GLS_VCS_ARGS` (not tried: `+verilog2001ext+.v` to read `.v` files as Verilog-2001, `-override_timescale=1ns/1ps`).
 
-Back: [README.md](../README.md)
+Back: [README.md](../../../README.md)

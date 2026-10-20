@@ -9,8 +9,10 @@ SHELL       := /bin/bash
 .DELETE_ON_ERROR:
 .SECONDARY:
 
-SB_ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
-FLOW     := $(SB_ROOT)/flow
+# TRACK_DIR: this track's folder (flow, design.mk, constraints, build/); SB_ROOT: the repo root (shared RTL and testbenches)
+TRACK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+SB_ROOT  := $(abspath $(TRACK_DIR)/../..)
+FLOW     := $(TRACK_DIR)/flow
 SCRIPTS  := $(FLOW)/scripts
 DESIGN   ?= gcd
 
@@ -46,11 +48,13 @@ EQY_YOSYS     ?= $(or $(wildcard $(dir $(shell command -v $(EQY)))yosys),yosys)
 PLATFORM_MK := $(FLOW)/platforms/sky130hd.mk
 include $(PLATFORM_MK)
 
-DESIGN_DIR := $(SB_ROOT)/designs/$(DESIGN)
-ifeq ($(wildcard $(DESIGN_DIR)/design.mk),)
+# DESIGN_DIR: the design at the repo root (rtl/, tb/); TRACK_DESIGN_DIR: its files in this track (design.mk, SDC, ...)
+DESIGN_DIR       := $(SB_ROOT)/designs/$(DESIGN)
+TRACK_DESIGN_DIR := $(TRACK_DIR)/designs/$(DESIGN)
+ifeq ($(wildcard $(TRACK_DESIGN_DIR)/design.mk),)
   $(error DESIGN=$(DESIGN): no designs/$(DESIGN)/design.mk)
 endif
-include $(DESIGN_DIR)/design.mk
+include $(TRACK_DESIGN_DIR)/design.mk
 
 # --- optional design.mk settings ---
 SYNTH_DEFINES  ?=
@@ -79,7 +83,7 @@ BUFFER_PORTS     ?= 0
 MACROS        ?=
 MACRO_VARIANT ?= base
 MACRO_CDL     ?=
-macro_abs      = $(SB_ROOT)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
+macro_abs      = $(TRACK_DIR)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
 MACRO_LEFS    += $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
 MACRO_LIBS    += $(foreach m,$(MACROS),$(call macro_abs,$(m)).lib)
 MACRO_GDS     += $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
@@ -95,7 +99,7 @@ SYNTH_RTL := $(RTL_FILES) $(MACRO_VERILOG)
 
 # run name; each variant keeps its own build directory
 VARIANT ?= base
-BUILD   ?= $(SB_ROOT)/build/$(DESIGN)/$(VARIANT)
+BUILD   ?= $(TRACK_DIR)/build/$(DESIGN)/$(VARIANT)
 TIMES   := $(BUILD)/runtimes.txt
 TIMED   := $(SCRIPTS)/util/timed.sh $(TIMES)
 
@@ -104,7 +108,7 @@ CLOCK_PERIOD_NS := $(if $(wildcard $(SDC_FILE)),$(shell tclsh $(SCRIPTS)/util/cl
 CLOCK_PERIOD_PS := $(if $(CLOCK_PERIOD_NS),$(shell awk 'BEGIN{printf "%d", $(CLOCK_PERIOD_NS)*1000 + 0.5}'))
 ABC_DELAY_PS    := $(if $(CLOCK_PERIOD_NS),$(shell awk 'BEGIN{printf "%d", $(CLOCK_PERIOD_NS)*1000*$(ABC_DELAY_FRAC) + 0.5}'))
 
-FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
+FLOW_DEPS := $(PLATFORM_MK) $(TRACK_DESIGN_DIR)/design.mk
 OR_RUN    := $(OPENROAD) -no_init -no_splash -exit
 
 # --- targets ---
@@ -115,7 +119,7 @@ FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
 	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls | abstract | all | compare | clean | info"
-	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
+	@echo "  DESIGN:  $(notdir $(wildcard $(TRACK_DIR)/designs/*))"
 	@echo "  compare: run ORFS on the same netlist and SDC and print both flows' numbers per stage"
 	@echo "  lec-mutation: LEC must fail on broken netlists"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
@@ -152,7 +156,7 @@ MACRO_MAKE_VARS := SB_PDK YOSYS OPENROAD KLAYOUT
 cmdline_vars     = $(strip $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v))))
 macros:
 	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(cmdline_vars)) \
-	  $(MAKE) --no-print-directory $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) -C $(SB_ROOT) abstract \
+	  $(MAKE) --no-print-directory $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) -C $(TRACK_DIR) abstract \
 	  DESIGN=$(m) VARIANT=$(MACRO_VARIANT) $(foreach v,$(MACRO_MAKE_VARS),$(v)='$($(v))') &&) true
 $(MACRO_FILES): ;
 
@@ -163,7 +167,7 @@ $(BUILD):
 	mkdir -p $@
 
 # --- lint (Verilator and sb_lint gate, Verible is advisory) ---
-LINT_WAIVERS ?= $(wildcard $(DESIGN_DIR)/lint_waivers.vlt)
+LINT_WAIVERS ?= $(wildcard $(TRACK_DESIGN_DIR)/lint_waivers.vlt)
 $(BUILD)/lint.log: $(RTL_FILES) $(MACRO_VERILOG) $(LINT_WAIVERS) $(FLOW_DEPS) $(SCRIPTS)/lint/sb_lint.py | $(BUILD)
 	@echo "== lint: verilator --lint-only -Wall" | tee $@
 	verilator --lint-only -Wall --top-module $(TOP) $(addprefix -I,$(RTL_INCDIRS)) \

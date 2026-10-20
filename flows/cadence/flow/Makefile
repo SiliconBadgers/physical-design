@@ -9,8 +9,10 @@ SHELL       := /bin/bash
 .DELETE_ON_ERROR:
 .SECONDARY:
 
-SB_ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
-FLOW     := $(SB_ROOT)/flow
+# TRACK_DIR: this track's folder (flow, design.mk, constraints, build/); SB_ROOT: the repo root (shared RTL and testbenches)
+TRACK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+SB_ROOT  := $(abspath $(TRACK_DIR)/../..)
+FLOW     := $(TRACK_DIR)/flow
 SCRIPTS  := $(FLOW)/scripts
 DESIGN   ?= gcd
 
@@ -44,11 +46,13 @@ GLS_XRUN_ARGS  ?= -seq_udp_delay 50ps
 PLATFORM_MK := $(FLOW)/platforms/sky130_scl_9T.mk
 include $(PLATFORM_MK)
 
-DESIGN_DIR := $(SB_ROOT)/designs/$(DESIGN)
-ifeq ($(wildcard $(DESIGN_DIR)/design.mk),)
+# DESIGN_DIR: the design at the repo root (rtl/, tb/); TRACK_DESIGN_DIR: its files in this track (design.mk, SDC, ...)
+DESIGN_DIR       := $(SB_ROOT)/designs/$(DESIGN)
+TRACK_DESIGN_DIR := $(TRACK_DIR)/designs/$(DESIGN)
+ifeq ($(wildcard $(TRACK_DESIGN_DIR)/design.mk),)
   $(error DESIGN=$(DESIGN): no designs/$(DESIGN)/design.mk)
 endif
-include $(DESIGN_DIR)/design.mk
+include $(TRACK_DESIGN_DIR)/design.mk
 
 # --- optional design.mk settings ---
 RTL_INCDIRS      ?=
@@ -56,7 +60,7 @@ RTL_DEFINES      ?=
 TB_SOURCES       ?=
 MACRO_VERILOG    ?=
 MACRO_SIM_MODELS ?=
-LINT_WAIVERS     ?= $(wildcard $(DESIGN_DIR)/hal_waivers.txt)
+LINT_WAIVERS     ?= $(wildcard $(TRACK_DESIGN_DIR)/hal_waivers.txt)
 # HAL rules lint turns off (style rules that fire on correct RTL): flow/scripts/lint/hal_rules.f; empty = every rule
 HAL_ARGS         ?= -f $(SCRIPTS)/lint/hal_rules.f
 CORE_UTILIZATION ?= 40
@@ -74,7 +78,7 @@ PDN_STRAP_PITCH  ?= 50
 # power grid script sourced by floorplan.tcl
 PDN_TCL          ?= $(SCRIPTS)/pnr/power.tcl
 # corners for setup and for hold (Innovus and Tempus)
-# tt by default, like track-a; add ss/ff for full signoff
+# tt by default, like Track A; add ss/ff for full signoff
 SETUP_CORNERS    ?= tt
 HOLD_CORNERS     ?= tt
 # Quantus effort in finish: signoff (standalone Quantus), high, medium or low
@@ -86,7 +90,7 @@ DRC_DENSITY      ?= 0
 # hard macros: designs built first and used as abstracts (design.mk: MACROS := <design> ...)
 MACROS        ?=
 MACRO_VARIANT ?= base
-macro_abs      = $(SB_ROOT)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
+macro_abs      = $(TRACK_DIR)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
 # timing models of the macros at one corner
 macro_libs     = $(foreach m,$(MACROS),$(call macro_abs,$(m))_$(1).lib)
 MACRO_LIBS    := $(foreach c,$(CORNERS),$(call macro_libs,$(c)))
@@ -102,14 +106,14 @@ MACRO_CHANNEL ?= 80
 
 # run name; each variant keeps its own build directory
 VARIANT ?= base
-BUILD   ?= $(SB_ROOT)/build/$(DESIGN)/$(VARIANT)
+BUILD   ?= $(TRACK_DIR)/build/$(DESIGN)/$(VARIANT)
 TIMES   := $(BUILD)/runtimes.txt
 TIMED   := $(SCRIPTS)/util/timed.sh $(TIMES)
 # Voltus power-grid view of the library (the PDK ships none), built once
-PGV_DIR ?= $(SB_ROOT)/build/pgv
+PGV_DIR ?= $(TRACK_DIR)/build/pgv
 PGV     := $(PGV_DIR)/techonly.cl
 
-FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
+FLOW_DEPS := $(PLATFORM_MK) $(TRACK_DESIGN_DIR)/design.mk
 
 # --- targets ---
 .PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean FORCE
@@ -119,7 +123,7 @@ FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
 	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls | abstract | all | clean | info"
-	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
+	@echo "  DESIGN:  $(notdir $(wildcard $(TRACK_DIR)/designs/*))"
 	@echo "  info:    settings, tools found on PATH, PDK files present"
 	@echo "  lec-mutation: LEC must fail on broken netlists"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
@@ -161,7 +165,7 @@ MACRO_MAKE_VARS := SB_PDK NCPU GENUS INNOVUS TEMPUS VOLTUS GENUS_FLAGS INNOVUS_F
 cmdline_vars     = $(strip $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v))),$(v))))
 macros:
 	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(cmdline_vars)) \
-	  $(MAKE) --no-print-directory $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) -C $(SB_ROOT) abstract \
+	  $(MAKE) --no-print-directory $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) -C $(TRACK_DIR) abstract \
 	  DESIGN=$(m) VARIANT=$(MACRO_VARIANT) $(foreach v,$(MACRO_MAKE_VARS),$(v)='$($(v))') &&) true
 $(MACRO_FILES): ;
 

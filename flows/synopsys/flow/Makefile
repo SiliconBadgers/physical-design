@@ -9,8 +9,10 @@ SHELL       := /bin/bash
 .DELETE_ON_ERROR:
 .SECONDARY:
 
-SB_ROOT  := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
-FLOW     := $(SB_ROOT)/flow
+# TRACK_DIR: this track's folder (flow, design.mk, constraints, build/); SB_ROOT: the repo root (shared RTL and testbenches)
+TRACK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
+SB_ROOT  := $(abspath $(TRACK_DIR)/../..)
+FLOW     := $(TRACK_DIR)/flow
 SCRIPTS  := $(FLOW)/scripts
 DESIGN   ?= gcd
 
@@ -40,7 +42,7 @@ SIM_TIMEOUT ?= 900
 GLS_VCS_ARGS  ?=
 
 # --- sign-off corners (ss, tt or ff): setup at ss, hold at ff ---
-# tt by default, like track-a; add ss/ff for full signoff
+# tt by default, like Track A; add ss/ff for full signoff
 SETUP_CORNERS ?= tt
 HOLD_CORNERS  ?= tt
 # corner Design Compiler optimizes for
@@ -51,11 +53,13 @@ GDS_TOOL      ?= icc2
 PLATFORM_MK := $(FLOW)/platforms/sky130hd.mk
 include $(PLATFORM_MK)
 
-DESIGN_DIR := $(SB_ROOT)/designs/$(DESIGN)
-ifeq ($(wildcard $(DESIGN_DIR)/design.mk),)
+# DESIGN_DIR: the design at the repo root (rtl/, tb/); TRACK_DESIGN_DIR: its files in this track (design.mk, SDC, ...)
+DESIGN_DIR       := $(SB_ROOT)/designs/$(DESIGN)
+TRACK_DESIGN_DIR := $(TRACK_DIR)/designs/$(DESIGN)
+ifeq ($(wildcard $(TRACK_DESIGN_DIR)/design.mk),)
   $(error DESIGN=$(DESIGN): no designs/$(DESIGN)/design.mk)
 endif
-include $(DESIGN_DIR)/design.mk
+include $(TRACK_DESIGN_DIR)/design.mk
 
 # --- optional design.mk settings ---
 RTL_INCDIRS      ?=
@@ -85,7 +89,7 @@ MACRO_SIM_MODELS ?=
 # hard macros: designs built first and used as abstracts (design.mk: MACROS := <design> ...)
 MACROS        ?=
 MACRO_VARIANT ?= base
-macro_abs      = $(SB_ROOT)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
+macro_abs      = $(TRACK_DIR)/build/$(1)/$(MACRO_VARIANT)/abstract/$(1)
 MACRO_LEFS    := $(foreach m,$(MACROS),$(call macro_abs,$(m)).lef)
 MACRO_GDS     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).gds)
 MACRO_CDL     := $(foreach m,$(MACROS),$(call macro_abs,$(m)).cdl)
@@ -108,14 +112,14 @@ STA_CORNERS := $(sort $(SETUP_CORNERS) $(HOLD_CORNERS))
 
 # run name; each variant keeps its own build directory
 VARIANT ?= base
-BUILD   ?= $(SB_ROOT)/build/$(DESIGN)/$(VARIANT)
+BUILD   ?= $(TRACK_DIR)/build/$(DESIGN)/$(VARIANT)
 TIMES   := $(BUILD)/runtimes.txt
 TIMED   := $(SCRIPTS)/util/timed.sh $(TIMES)
 # clock period from the SDC: `set clk_period <ns>` or `set clk_period [expr {<a> / <b>}]`
 CLOCK_PERIOD_NS := $(shell awk '$$1 == "set" && $$2 == "clk_period" { v = $$3; if (v == "[expr") { a = $$4; b = $$6; \
   gsub(/[^0-9.]/, "", a); gsub(/[^0-9.]/, "", b); v = a / b }; print v; exit }' $(SDC_FILE) 2>/dev/null)
 
-FLOW_DEPS := $(PLATFORM_MK) $(DESIGN_DIR)/design.mk
+FLOW_DEPS := $(PLATFORM_MK) $(TRACK_DESIGN_DIR)/design.mk
 RUN_DEPS  := $(SCRIPTS)/util/run.tcl $(SCRIPTS)/util/metrics.tcl
 
 # $(call snps,<stage>,<shell>,<script>,<env file>): run a Tcl script in a Synopsys shell from the build directory;
@@ -138,7 +142,7 @@ FORCE:
 help:
 	@echo "usage: make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]"
 	@echo "  stages:  lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls | abstract | all | clean | info"
-	@echo "  DESIGN:  $(notdir $(wildcard $(SB_ROOT)/designs/*))"
+	@echo "  DESIGN:  $(notdir $(wildcard $(TRACK_DIR)/designs/*))"
 	@echo "  corners: SETUP_CORNERS=$(SETUP_CORNERS) HOLD_CORNERS=$(HOLD_CORNERS) (ss, tt or ff)"
 	@echo "  lec-mutation: LEC must fail on broken netlists"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
@@ -176,7 +180,7 @@ CMDLINE_VARS = $(foreach v,$(.VARIABLES),$(if $(filter command line,$(origin $(v
 macros:
 	@$(foreach m,$(MACROS),env -u MAKEFLAGS -u MFLAGS $(addprefix -u ,$(CMDLINE_VARS)) \
 	  $(MAKE) $(if $(findstring n,$(firstword -$(MAKEFLAGS))),-n) \
-	  --no-print-directory -C $(SB_ROOT) abstract DESIGN=$(m) VARIANT=$(MACRO_VARIANT) SB_PDK=$(SB_PDK) SB_VIEWS=$(SB_VIEWS) CORES=$(CORES) \
+	  --no-print-directory -C $(TRACK_DIR) abstract DESIGN=$(m) VARIANT=$(MACRO_VARIANT) SB_PDK=$(SB_PDK) SB_VIEWS=$(SB_VIEWS) CORES=$(CORES) \
 	  DC_SHELL=$(DC_SHELL) PT_SHELL=$(PT_SHELL) ICC2_SHELL=$(ICC2_SHELL) ICC2_LM_SHELL=$(ICC2_LM_SHELL) \
 	  LC_SHELL=$(LC_SHELL) STARRC=$(STARRC) KLAYOUT=$(KLAYOUT) &&) true
 $(MACRO_FILES): ;

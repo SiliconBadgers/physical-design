@@ -1,17 +1,19 @@
 # Pick a track
 
-You are on `main`, which has no flow scripts. Check out the branch for your tools:
+Each track runs the flow with one set of tools and lives in its own folder under `tracks/`: its flow scripts, its config and constraint files for each design, and its pages in `track/`. The RTL and testbenches in `designs/` at the repo root are shared.
 
-| Branch | Tools |
-|---|---|
-| `track-a` | open-source |
-| `track-b1` | Cadence |
-| `track-b2` | Synopsys |
+| Track | Tools | Folder |
+|---|---|---|
+| A | open-source | [`tracks/a`](a/track/README.md) |
+| B1 | Cadence | [`tracks/b1`](b1/track/README.md) |
+| B2 | Synopsys | [`tracks/b2`](b2/track/README.md) |
+
+Run every command from your track's folder; build output goes to its `build/` folder:
 
 ```
-git checkout track-a
+cd tracks/a           # or tracks/b1, tracks/b2
 ```
 
-On that branch, this page is replaced by the track's setup and commands.
+Setup and commands: `track/README.md` in that folder ([Track A](a/track/README.md), [Track B1](b1/track/README.md), [Track B2](b2/track/README.md)).
 
 Back: [README.md](../README.md)

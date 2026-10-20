@@ -23,8 +23,8 @@ On the machine, not inside the container (it has no git):
 ```
 mkdir -p /var/tmp/$USER/sb && cd /var/tmp/$USER/sb
 git clone <PDK repo URL> silicon-badgers-sky130-pdk
-git clone -b track-b2 <pd-flow repo URL> pd-flow
-pd-flow/tools/cae/setup.sh
+git clone <pd-flow repo URL> pd-flow
+pd-flow/tracks/b2/tools/cae/setup.sh
 ```
 
 - The script installs into `/var/tmp/$USER/sb-tools`; `--prefix <folder>` picks another new or empty folder (under `/var/tmp` or your home, which the container sees). It takes a minute or two.
@@ -57,7 +57,7 @@ Or use views someone has already built, for example a mentor's copy: `export SB_
 ## Then
 
 ```
-cd /var/tmp/$USER/sb/pd-flow
+cd /var/tmp/$USER/sb/pd-flow/tracks/b2
 make info DESIGN=gcd
 make all DESIGN=gcd
 ```
@@ -73,6 +73,6 @@ and on through [README.md](README.md): Run, then the First run checklist. On CAE
 | `klayout: error while loading shared libraries` | KLayout runs only inside the container |
 | `vcs1fe: error while loading shared libraries: libelf.so.1` | `vcs` without `-full64` starts a 32-bit front end, which the container cannot run (and still exits 0). The flow always passes `-full64` |
 
-Tested on CAE on 2026-10-13 with the container image of 2026-09-18 (`/srv/auto/containers/cae-alma8-base_latest.sif`).
+Tested on CAE on 2026-10-19 with the container image of 2026-09-18 (`/srv/auto/containers/cae-alma8-base_latest.sif`).
 
 Back: [README.md](README.md)
