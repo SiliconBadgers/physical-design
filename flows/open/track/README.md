@@ -7,7 +7,7 @@ Track A is the folder `tracks/a`. Run every command on this page from there; pat
 ## Setup
 
 - Tools at the versions in `tools.lock`: an ORFS build gives OpenROAD, Yosys (with `read_slang`) and KLayout ([OpenROAD-flow-scripts](https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts) documents the build); add Verilator, Icarus Verilog and `pip install cocotb==2.1.0`.
-- Clone the PDK repo next to this repo under that folder name (`git clone <PDK repo URL> silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `open/sky130hd` folder.
+- Clone the PDK repo next to this repo under that folder name (`git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `open/sky130hd` folder.
 - `make compare` also needs an ORFS checkout at the `tools.lock` commit (`ORFS=<path>`).
 
 ## Run

@@ -1,6 +1,6 @@
 # SiliconBadgers PD flow
 
-The team's own RTL-to-GDS scripts, maintained by mentors. Every track runs the same stages with one set of tools, so a design can go through any of them and the results can be compared.
+SiliconBadgers' RTL-to-GDS scripts for the SkyWater 130 nm process. Every track runs the same stages with one set of tools, so a design can go through any of them and the results can be compared.
 
 ## Tracks
 
@@ -18,6 +18,16 @@ make all DESIGN=gcd
 ```
 
 Setup, commands and status for a track: `track/README.md` in its folder. [tracks/README.md](tracks/README.md) helps you pick one.
+
+## PDK
+
+Clone the [SiliconBadgers sky130 PDK](https://github.com/ihagedo/silicon-badgers-sky130-pdk) next to this repo:
+
+```
+git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git
+```
+
+Tracks A and B2 use it as it is. Track B1 also needs Cadence's sky130 library and decks, which you add yourself ([Track B1 setup](tracks/b1/track/README.md#cadence-library-and-decks)).
 
 ## Stages
 
@@ -46,3 +56,7 @@ Each stage writes a metrics file with the same key names in every track (for exa
 | `tracks/<track>/designs/<name>/` | that track's config (`design.mk`) and constraint file for it |
 
 `tile` (the systolic MAC array) places four `sb_sram_256x8` blocks as hard macros. Each track builds `sb_sram_256x8` through the same stages first, then turns it into an abstract (LEF, timing model, GDS, netlist).
+
+## License
+
+Apache-2.0 ([LICENSE](LICENSE)). A few files come from OpenROAD-flow-scripts and keep its BSD 3-Clause license; [NOTICE](NOTICE) lists them.

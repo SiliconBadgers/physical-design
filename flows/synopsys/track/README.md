@@ -23,7 +23,7 @@ Assumed versions: the V-2023.12 releases or newer of Design Compiler, PrimeTime,
 ## Setup
 
 - Load the Synopsys tools the way your site does it, then check: `which dc_shell pt_shell icc2_shell StarXtract fm_shell vcs klayout`. On the UW CAE Linux machines follow [cae.md](cae.md) instead: the tool container, and a script that installs KLayout and Python and fixes StarRC.
-- Clone the PDK repo next to this repo under that folder name (`git clone <PDK repo URL> silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `synopsys/` folder, the DRC and LVS decks in `open/sky130hd/` and the cell simulation models in `open/verilog/`.
+- Clone the PDK repo next to this repo under that folder name (`git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `synopsys/` folder, the DRC and LVS decks in `open/sky130hd/` and the cell simulation models in `open/verilog/`.
 - Build the Synopsys views once per PDK checkout: `$SB_PDK/synopsys/make_views.sh`. It writes `synopsys/views/`: three `.db` files (ss, tt, ff), the `.tluplus` and `.nxtgrd` RC tables and `sky130_fd_sc_hd.ndm`. Without them `make synth` and later stages stop with this instruction. `make info` shows whether they are there. To use views built elsewhere (for example a mentor's copy), set `SB_VIEWS` to that folder.
 - `pip install cocotb==2.1.0` for `make sim` and `make gls`.
 

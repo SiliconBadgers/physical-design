@@ -22,7 +22,7 @@ On the machine, not inside the container (it has no git):
 
 ```
 mkdir -p /var/tmp/$USER/sb && cd /var/tmp/$USER/sb
-git clone <PDK repo URL> silicon-badgers-sky130-pdk
+git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk
 git clone <pd-flow repo URL> pd-flow
 pd-flow/tracks/b2/tools/cae/setup.sh
 ```

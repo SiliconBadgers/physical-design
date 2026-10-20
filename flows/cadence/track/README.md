@@ -19,7 +19,7 @@ Track B1 is the folder `tracks/b1`. Run every command on this page from there; p
 
 ## Setup
 
-- Clone the PDK repo next to this repo under that folder name (`git clone <PDK repo URL> silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `cadence/` folder.
+- Clone the PDK repo next to this repo under that folder name (`git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `cadence/` folder, which you fill in yourself (below).
 - Load the tools and licenses the way your site does it, for example:
   ```
   module load xcelium genus innovus quantus tempus voltus pegasus conformal   # names vary per site
@@ -28,6 +28,19 @@ Track B1 is the folder `tracks/b1`. Run every command on this page from there; p
   Other command names or a wrapper: `GENUS=`, `INNOVUS=`, `TEMPUS=`, `VOLTUS=`, `PEGASUS=`, `XRUN=`, `LEC=` on the `make` line.
 - Python 3.10 with `cocotb==2.1.0` for `make sim` and `make gls`.
 - `make info`: every tool found, every PDK file `OK`.
+
+
+### Cadence library and decks
+
+The PDK repo has no Cadence files: Cadence's sky130 releases can't be redistributed. Copy them from those releases into your PDK clone:
+
+| PDK path | From |
+|---|---|
+| `cadence/sky130_scl_9T/`, `cadence/sky130_scl_9T_tech/` | the `sky130_scl_9T/` and `sky130_scl_9T_tech/` folders of `sky130_scl_9T_0.1.2.tgz` |
+| `cadence/tech/qrcTechFile` | `quantus/extraction/typical/qrcTechFile` in `sky130_release_0.1.0.tgz` |
+| `cadence/tech/pegasus/drc/`, `cadence/tech/pegasus/lvs/` | `Sky130_DRC/` and `Sky130_LVS/` in `sky130_release_0.1.0.tgz` |
+
+`flow/platforms/sky130_scl_9T.mk` names every file the track reads, and `make info` checks that each one is there.
 
 ## Run
 
