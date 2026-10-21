@@ -2,7 +2,7 @@
 
 The flow on `sky130_scl_9T`, a 9-track sky130 cell library, with Cadence tools. It needs a machine with the tools and their licenses.
 
-Track B1 is the folder `tracks/b1`. Run every command on this page from there; paths are relative to it.
+Track B1 is the folder `flows/cadence`. Run every command on this page from there; paths are relative to it.
 
 ## Tools
 
@@ -19,7 +19,7 @@ Track B1 is the folder `tracks/b1`. Run every command on this page from there; p
 
 ## Setup
 
-- Clone the PDK repo next to this repo under that folder name (`git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `cadence/` folder, which you fill in yourself (below).
+- From the repo root, clone the PDK repo: `git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git` (the flow looks for it in `silicon-badgers-sky130-pdk/` there), or set `SB_PDK`. This track uses its `cadence/` folder, which you fill in yourself (below).
 - Load the tools and licenses the way your site does it, for example:
   ```
   module load xcelium genus innovus quantus tempus voltus pegasus conformal   # names vary per site
@@ -76,7 +76,7 @@ Flow settings: `HAL_ARGS` (`-f flow/scripts/lint/hal_rules.f`: the HAL style rul
 | `flow/scripts/pnr/` | one Innovus script per stage, `power.tcl`, `common.tcl` |
 | `flow/scripts/genus/`, `tempus/`, `voltus/`, `pegasus/` | the other tool steps |
 | `flow/scripts/lec/` | Conformal dofiles, result check, mutation check |
-| `designs/<name>/` | `design.mk`, `constraint.sdc`, `hal_waivers.txt` (this track); `rtl/`, `tb/` are shared, in `designs/<name>/` at the repo root (`../../designs/<name>/`) |
+| `designs/<name>/` | `design.mk`, `constraint.sdc`, `hal_waivers.txt` (this track); `rtl/`, `tb/` are shared, in `flows/designs/<name>/` (`../designs/<name>/`) |
 
 ## Macros
 
@@ -137,4 +137,4 @@ The scripts were written against the tool documentation. On the first run on a l
 21. `make lec-mutation` for the three designs: `4/4 caught`, logs in `lec_mutation/`.
 22. `make gls DESIGN=gcd`, then `DESIGN=tile`: `xrun` accepts `-seq_udp_delay 50ps` (else set `GLS_XRUN_ARGS`); `sim_gls/xrun_build.log` has no `*E` (a missing module means `final_logic.v` kept a physical cell; a module defined twice means the tile and macro netlists share a Genus module name); 2/2 and 3/3 tests pass.
 
-Back: [README.md](../../../README.md)
+Back: [README.md](../../README.md)

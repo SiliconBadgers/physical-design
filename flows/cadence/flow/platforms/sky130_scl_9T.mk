@@ -3,7 +3,7 @@
 # Date:        2026-10-11
 # Description: sky130_scl_9T platform settings. All files come from the cadence/ folder of the SiliconBadgers sky130 PDK repo.
 
-# SiliconBadgers sky130 PDK repo
+# SiliconBadgers sky130 PDK repo; default: its clone in the physical-design repo root, next to flows/
 SB_PDK       ?= $(SB_ROOT)/../silicon-badgers-sky130-pdk
 PLATFORM_DIR := $(SB_PDK)/cadence
 SCL          := $(PLATFORM_DIR)/sky130_scl_9T

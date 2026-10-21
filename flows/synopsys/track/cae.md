@@ -22,9 +22,10 @@ On the machine, not inside the container (it has no git):
 
 ```
 mkdir -p /var/tmp/$USER/sb && cd /var/tmp/$USER/sb
-git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk
-git clone <pd-flow repo URL> pd-flow
-pd-flow/tracks/b2/tools/cae/setup.sh
+git clone https://github.com/SiliconBadgers/physical-design.git
+cd physical-design
+git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git
+flows/synopsys/tools/cae/setup.sh
 ```
 
 - The script installs into `/var/tmp/$USER/sb-tools`; `--prefix <folder>` picks another new or empty folder (under `/var/tmp` or your home, which the container sees). It takes a minute or two.
@@ -49,7 +50,7 @@ synopsys-run
 Build them once per PDK checkout, in the session above (about 30 minutes):
 
 ```
-cd /var/tmp/$USER/sb/silicon-badgers-sky130-pdk/synopsys && ./make_views.sh
+cd /var/tmp/$USER/sb/physical-design/silicon-badgers-sky130-pdk/synopsys && ./make_views.sh
 ```
 
 Or use views someone has already built, for example a mentor's copy: `export SB_VIEWS=<their views folder>` before `synopsys-run`, or `make <stage> SB_VIEWS=<folder>`. `make info` shows the views the flow uses.
@@ -57,7 +58,7 @@ Or use views someone has already built, for example a mentor's copy: `export SB_
 ## Then
 
 ```
-cd /var/tmp/$USER/sb/pd-flow/tracks/b2
+cd /var/tmp/$USER/sb/physical-design/flows/synopsys
 make info DESIGN=gcd
 make all DESIGN=gcd
 ```

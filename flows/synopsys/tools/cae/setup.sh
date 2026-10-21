@@ -2,9 +2,9 @@
 # File:        setup.sh
 # Author:      Isaac Hagedorn
 # Date:        2026-10-13
-# Description: UW CAE Linux machines only (page: tracks/b2/track/cae.md). Installs what Track B2 needs next to CAE's Synopsys
+# Description: UW CAE Linux machines only (page: flows/synopsys/track/cae.md). Installs what Track B2 needs next to CAE's Synopsys
 #              modules into one folder: Python 3.10 with cocotb, KLayout, wrappers for StarRC, and env.sh.
-#              Usage: tracks/b2/tools/cae/setup.sh [--prefix <folder>]   (default /var/tmp/$USER/sb-tools)
+#              Usage: flows/synopsys/tools/cae/setup.sh [--prefix <folder>]   (default /var/tmp/$USER/sb-tools)
 #              Run it on the host (not inside synopsys-run). Running it again skips what is already installed.
 set -euo pipefail
 
@@ -153,7 +153,7 @@ fi
 echo "3/3 wrappers in $prefix/bin and $prefix/env.sh"
 cat > "$prefix/bin/klayout" <<EOF
 #!/bin/bash
-# KLayout $KLAYOUT_VERSION from the RHEL 8 RPM (written by tracks/b2/tools/cae/setup.sh); runs inside the CAE container only.
+# KLayout $KLAYOUT_VERSION from the RHEL 8 RPM (written by flows/synopsys/tools/cae/setup.sh); runs inside the CAE container only.
 K=$prefix/klayout/usr
 export LD_LIBRARY_PATH=\$K/lib64:\$K/lib64/klayout:\$K/lib64/pulseaudio\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}
 export RUBYLIB=\$K/share/ruby:\$K/lib64/ruby\${RUBYLIB:+:\$RUBYLIB}
@@ -164,7 +164,7 @@ EOF
 for tool in StarXtract grdgenxo; do
     cat > "$prefix/bin/$tool" <<'EOF'
 #!/bin/bash
-# StarRC 2026.03 on CAE (written by tracks/b2/tools/cae/setup.sh): its launcher puts the emsolver libstdc++ first on the
+# StarRC 2026.03 on CAE (written by flows/synopsys/tools/cae/setup.sh): its launcher puts the emsolver libstdc++ first on the
 # library path, and that one lacks GLIBCXX_3.4.32. Preload the libstdc++ StarRC ships for itself, then run the
 # real tool: the next one on PATH after this folder.
 name=${0##*/}
@@ -182,7 +182,7 @@ EOF
 done
 chmod +x "$prefix/bin/"*
 cat > "$prefix/env.sh" <<EOF
-# Track B2 tools on the CAE machines (written by tracks/b2/tools/cae/setup.sh). Source it after the module loads:
+# Track B2 tools on the CAE machines (written by flows/synopsys/tools/cae/setup.sh). Source it after the module loads:
 #   module load synopsys/suite/2026 synopsys/starrc/2026.03
 #   source $prefix/env.sh
 #   synopsys-run

@@ -9,9 +9,9 @@ SHELL       := /bin/bash
 .DELETE_ON_ERROR:
 .SECONDARY:
 
-# TRACK_DIR: this track's folder (flow, design.mk, constraints, build/); SB_ROOT: the repo root (shared RTL and testbenches)
+# TRACK_DIR: this track's folder (flow, design.mk, constraints, build/); SB_ROOT: the flow's root, flows/ (shared RTL and testbenches)
 TRACK_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/..)
-SB_ROOT  := $(abspath $(TRACK_DIR)/../..)
+SB_ROOT  := $(abspath $(TRACK_DIR)/..)
 FLOW     := $(TRACK_DIR)/flow
 SCRIPTS  := $(FLOW)/scripts
 DESIGN   ?= gcd
@@ -46,7 +46,7 @@ GLS_XRUN_ARGS  ?= -seq_udp_delay 50ps
 PLATFORM_MK := $(FLOW)/platforms/sky130_scl_9T.mk
 include $(PLATFORM_MK)
 
-# DESIGN_DIR: the design at the repo root (rtl/, tb/); TRACK_DESIGN_DIR: its files in this track (design.mk, SDC, ...)
+# DESIGN_DIR: the shared design in flows/designs (rtl/, tb/); TRACK_DESIGN_DIR: its files in this track (design.mk, SDC, ...)
 DESIGN_DIR       := $(SB_ROOT)/designs/$(DESIGN)
 TRACK_DESIGN_DIR := $(TRACK_DIR)/designs/$(DESIGN)
 ifeq ($(wildcard $(TRACK_DESIGN_DIR)/design.mk),)

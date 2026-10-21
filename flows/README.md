@@ -1,33 +1,33 @@
 # SiliconBadgers PD flow
 
-SiliconBadgers' RTL-to-GDS scripts for the SkyWater 130 nm process. Every track runs the same stages with one set of tools, so a design can go through any of them and the results can be compared.
+SiliconBadgers' RTL-to-GDS scripts for the SkyWater 130 nm process. The flow lives under `flows/`: a folder per track and the designs they share. Every track runs the same stages with one set of tools, so a design can go through any of them and the results can be compared.
 
 ## Tracks
 
 | Track | Tools | Folder |
 |---|---|---|
-| A | Open-source: Yosys, OpenROAD, KLayout (reference: OpenROAD-flow-scripts) | [`tracks/a`](tracks/a/track/README.md) |
-| B1 | Cadence: Genus, Innovus, Tempus, Quantus, Voltus, Pegasus | [`tracks/b1`](tracks/b1/track/README.md) |
-| B2 | Synopsys: Design Compiler, IC Compiler II, StarRC, PrimeTime | [`tracks/b2`](tracks/b2/track/README.md) |
+| A | Open-source: Yosys, OpenROAD, KLayout (reference: OpenROAD-flow-scripts) | [`flows/open`](open/track/README.md) |
+| B1 | Cadence: Genus, Innovus, Tempus, Quantus, Voltus, Pegasus | [`flows/cadence`](cadence/track/README.md) |
+| B2 | Synopsys: Design Compiler, IC Compiler II, StarRC, PrimeTime | [`flows/synopsys`](synopsys/track/README.md) |
 
 Run every command from your track's folder; build output goes to its `build/` folder:
 
 ```
-cd tracks/b2       # or tracks/a, tracks/b1
+cd flows/synopsys       # or flows/open, flows/cadence
 make all DESIGN=gcd
 ```
 
-Setup, commands and status for a track: `track/README.md` in its folder. [tracks/README.md](tracks/README.md) helps you pick one.
+Setup, commands and status for a track: `track/README.md` in its folder. [tracks.md](tracks.md) helps you pick one.
 
 ## PDK
 
-Clone the [SiliconBadgers sky130 PDK](https://github.com/ihagedo/silicon-badgers-sky130-pdk) next to this repo:
+From the repo root (the folder that holds `flows/`), clone the [SiliconBadgers sky130 PDK](https://github.com/ihagedo/silicon-badgers-sky130-pdk); git ignores the clone:
 
 ```
 git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git
 ```
 
-Tracks A and B2 use it as it is. Track B1 also needs Cadence's sky130 library and decks, which you add yourself ([Track B1 setup](tracks/b1/track/README.md#cadence-library-and-decks)).
+Tracks A and B2 use it as it is. Track B1 also needs Cadence's sky130 library and decks, which you add yourself ([Track B1 setup](cadence/track/README.md#cadence-library-and-decks)).
 
 ## Stages
 
@@ -51,9 +51,9 @@ Each stage writes a metrics file with the same key names in every track (for exa
 
 | Path | What |
 |---|---|
-| `designs/<name>/rtl/` | the RTL (shared by every track) |
-| `designs/<name>/tb/` | its simulation test |
-| `tracks/<track>/designs/<name>/` | that track's config (`design.mk`) and constraint file for it |
+| `flows/designs/<name>/rtl/` | the RTL (shared by every track) |
+| `flows/designs/<name>/tb/` | its simulation test |
+| `flows/<track>/designs/<name>/` | that track's config (`design.mk`) and constraint file for it |
 
 `tile` (the systolic MAC array) places four `sb_sram_256x8` blocks as hard macros. Each track builds `sb_sram_256x8` through the same stages first, then turns it into an abstract (LEF, timing model, GDS, netlist).
 

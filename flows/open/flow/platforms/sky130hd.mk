@@ -3,7 +3,7 @@
 # Date:        2026-10-09
 # Description: sky130hd platform settings. All files come from the SiliconBadgers sky130 PDK repo (ORFS platform format).
 
-# SiliconBadgers sky130 PDK repo
+# SiliconBadgers sky130 PDK repo; default: its clone in the physical-design repo root, next to flows/
 SB_PDK       ?= $(SB_ROOT)/../silicon-badgers-sky130-pdk
 PLATFORM_DIR := $(SB_PDK)/open/sky130hd
 

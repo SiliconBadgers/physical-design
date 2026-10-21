@@ -2,12 +2,12 @@
 
 The flow on sky130hd with Yosys, OpenROAD and KLayout. OpenROAD-flow-scripts (ORFS) run on the same netlist is the reference (`make compare`).
 
-Track A is the folder `tracks/a`. Run every command on this page from there; paths are relative to it.
+Track A is the folder `flows/open`. Run every command on this page from there; paths are relative to it.
 
 ## Setup
 
 - Tools at the versions in `tools.lock`: an ORFS build gives OpenROAD, Yosys (with `read_slang`) and KLayout ([OpenROAD-flow-scripts](https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts) documents the build); add Verilator, Icarus Verilog and `pip install cocotb==2.1.0`.
-- Clone the PDK repo next to this repo under that folder name (`git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git silicon-badgers-sky130-pdk`), or set `SB_PDK`. This track uses its `open/sky130hd` folder.
+- From the repo root, clone the PDK repo: `git clone https://github.com/ihagedo/silicon-badgers-sky130-pdk.git` (the flow looks for it in `silicon-badgers-sky130-pdk/` there), or set `SB_PDK`. This track uses its `open/sky130hd` folder.
 - `make compare` also needs an ORFS checkout at the `tools.lock` commit (`ORFS=<path>`).
 
 ## Run
@@ -37,7 +37,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `flow/platforms/sky130hd.mk` | platform files from the PDK repo |
 | `flow/scripts/pnr/` | one OpenROAD script per stage, `gds.py` |
 | `flow/scripts/lec/`, `flow/scripts/gls/` | eqy configs, mutation check; gate-level simulation |
-| `designs/<name>/` | `design.mk`, `constraint.sdc`, `lint_waivers.vlt` (this track); `rtl/`, `tb/` are shared, in `designs/<name>/` at the repo root (`../../designs/<name>/`) |
+| `designs/<name>/` | `design.mk`, `constraint.sdc`, `lint_waivers.vlt` (this track); `rtl/`, `tb/` are shared, in `flows/designs/<name>/` (`../designs/<name>/`) |
 
 ## Macros
 
@@ -63,4 +63,4 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 - `final.v` leaves out cells with no logic (taps, fillers, antenna diodes), as ORFS does; LVS uses `final.cdl`.
 - eqy runs the Yosys installed next to it (`EQY_YOSYS`): its plugin does not load in another Yosys build.
 
-Back: [README.md](../../../README.md)
+Back: [README.md](../../README.md)
