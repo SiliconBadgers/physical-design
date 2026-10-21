@@ -2,7 +2,10 @@ flow-kit
 Copyright 2026 Isaac Hagedorn
 
 flow-kit is licensed under the Apache License, Version 2.0 (flows/LICENSE),
-except for the files listed below.
+except for the files listed below. These terms cover the flow-kit files under
+flows/. They do not cover flows/synopsys/README.md,
+flows/synopsys/unit-manifest-template.csv or any other file of this repository
+that is not part of flow-kit.
 
 The following files are taken or adapted from OpenROAD-flow-scripts
 (https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts) and remain

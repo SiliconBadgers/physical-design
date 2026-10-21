@@ -59,4 +59,4 @@ Each stage writes a metrics file with the same key names in every track (for exa
 
 ## License
 
-Apache-2.0 ([LICENSE](LICENSE)). A few files come from OpenROAD-flow-scripts and keep its BSD 3-Clause license; [NOTICE](NOTICE) lists them.
+Apache-2.0 ([LICENSE](LICENSE)) for the flow-kit files under `flows/`. The team's own files here, `synopsys/README.md` and `synopsys/unit-manifest-template.csv`, are not covered. A few files come from OpenROAD-flow-scripts and keep its BSD 3-Clause license; [NOTICE](NOTICE) lists them.
