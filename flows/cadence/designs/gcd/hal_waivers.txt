@@ -1,0 +1,18 @@
+# File:        hal_waivers.txt
+# Author:      Isaac Hagedorn
+# Date:        2026-10-11
+# Description: Xcelium HAL lint waivers for gcd (make lint). One per line: <message code> [<file pattern>]  # reason
+# gcd.v is PyMTL-generated code taken unchanged from OpenROAD-flow-scripts; every track uses it as is. Most style rules are off for
+# every design (flow/scripts/lint/hal_rules.f); these are the other messages it gets, each checked.
+# coding style, unused ports and parameters of the generated code
+OLDALW */gcd/rtl/gcd.v   # Verilog-2001 always blocks, not SystemVerilog always_ff
+USEPAR */gcd/rtl/gcd.v   # nports kept for the generator's assertion only
+USEPRT */gcd/rtl/gcd.v   # every generated submodule has clk and reset ports, used or not
+# literals and widths: integer literals assigned to narrow signals, values fit
+INTTOB */gcd/rtl/gcd.v   # 0/1 integer literals assigned to 1-bit outputs
+ULCMPE */gcd/rtl/gcd.v   # 2-bit state compared with 32-bit constants that fit
+POOBID */gcd/rtl/gcd.v   # 3-input mux with a 2-bit select: sel is never 3 (A_MUX_SEL_* are 0..2)
+# structure
+LATBAS */gcd/rtl/gcd.v   # do_swap/do_sub are read only in the branch that assigns them (do_sub never): no latch after synthesis (make synth checks)
+LATMLG */gcd/rtl/gcd.v   # same do_swap/do_sub as LATBAS
+URDREG */gcd/rtl/gcd.v   # do_sub is assigned and never read; synthesis removes it

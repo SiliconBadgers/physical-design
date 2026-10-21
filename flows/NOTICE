@@ -1,0 +1,19 @@
+flow-kit
+Copyright 2026 Isaac Hagedorn
+
+flow-kit is licensed under the Apache License, Version 2.0 (flows/LICENSE),
+except for the files listed below. These terms cover the flow-kit files under
+flows/. They do not cover flows/synopsys/README.md,
+flows/synopsys/unit-manifest-template.csv or any other file of this repository
+that is not part of flow-kit.
+
+The following files are taken or adapted from OpenROAD-flow-scripts
+(https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts) and remain
+under its BSD 3-Clause License, Copyright (c) 2018-2023, The Regents of the
+University of California (flows/LICENSES/BSD-3-Clause-OpenROAD-flow-scripts.txt):
+
+- flows/designs/gcd/rtl/gcd.v (PyMTL-generated, unchanged; see flows/designs/gcd/rtl/README.orfs.md)
+- flows/open/designs/gcd/constraint.sdc (adapted)
+- flows/cadence/designs/gcd/constraint.sdc (adapted)
+- flows/synopsys/designs/gcd/constraint.sdc (adapted)
+- flows/open/designs/sb_sram_256x8/pdn.tcl (adapted from the sky130hd pdn.tcl)

@@ -18,7 +18,10 @@ The immediate delivery is one reproducible Synopsys synthesis baseline for the c
 
 | Location | Purpose |
 |---|---|
-| [flows/synopsys/](flows/synopsys/README.md) | Team-owned chip/unit synthesis scripts, unit manifest and source selection for issues #2 and #3. Record tool versions and a single baseline library/corner; no licensed files in Git. |
+| [flows/synopsys/](flows/synopsys/README.md) | Team-owned chip/unit synthesis scripts, unit manifest and source selection for issues #2 and #3. Record tool versions and a single baseline library/corner; no licensed files in Git. Also holds flow-kit's Track B2 reference flow ([track/README.md](flows/synopsys/track/README.md)). |
+| [flows/open/](flows/open/track/README.md) | flow-kit's Track A reference flow (RTL to GDS) with open-source tools: Yosys, OpenROAD, KLayout. |
+| [flows/cadence/](flows/cadence/track/README.md) | flow-kit's Track B1 reference flow (RTL to GDS) with Cadence tools. |
+| [flows/designs/](flows/README.md#designs) | RTL and tests of the flow-kit designs (gcd, sb_sram_256x8, tile), shared by the three tracks. |
 | [rtl/stubs/](rtl/stubs/README.md) | Clearly labeled temporary synthesizable stubs, separated from real component RTL. Their ports are proposals; coordinate them with RTL owners. |
 | [rtl/wrappers/](rtl/wrappers/README.md) | Chip assembly and unit wrappers that consume revision-pinned component sources. Do not copy authoritative component implementations here. |
 | [constraints/](constraints/README.md) | Chip and per-unit baseline clocks, I/O assumptions and justified exceptions. Identify unresolved constraints instead of quietly treating them as met. |
