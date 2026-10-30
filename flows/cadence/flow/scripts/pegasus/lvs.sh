@@ -23,6 +23,7 @@ read -ra pegasus <<< "${PEGASUS:-pegasus}"
 
 mkdir -p "$run"
 cd "$run"
+rm -f "$top.lvs.rpt"   # an earlier run's report must not count for this one
 
 # control file: the schematic (cell CDL first, then the Verilog netlist), the layout, and the reports
 {

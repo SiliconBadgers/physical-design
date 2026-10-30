@@ -21,13 +21,16 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `lint`, `sim` | Verilator, cocotb | `lint.log`, `results.xml` |
 | `synth`, `sta` | Yosys, OpenSTA | `netlist.v`, `sta_tt.rpt` |
 | `floorplan` `place` `cts` `grt` `route` `finish` | OpenROAD | `<stage>.odb`, `.log`, `.json` (metrics), `.rpt` |
-| `gds`, `drc`, `lvs` | KLayout | `final.gds`, `drc.lyrdb`, `lvs.lvsdb` |
+| `gds`, `drc`, `lvs` | KLayout | `final.gds`, `drc_count.txt`, `drc.lyrdb`, `lvs.lvsdb` |
 | `lec` | eqy | `lec_synth.log` (RTL vs `netlist.v`), `lec_route.log` (`netlist.v` vs routed `final.v`) |
 | `gls` | cocotb, Icarus | `gls_results.xml`: the RTL testbench on `final.v` with the cell models |
 | `abstract` | OpenROAD | `abstract/<top>.{lef,lib,gds,cdl,v}`: the design as a macro |
 | `all` | | every stage above |
 | `compare` | ORFS | both flows' metrics per stage; ORFS run in `orfs/` |
 | `lec-mutation` | eqy | both LEC steps must fail on broken netlists |
+
+- `finish` passes only when the setup and hold slack at tt (`finish__timing__setup__ws` and `finish__timing__hold__ws` in `finish.json`) are numbers ≥ 0. `drc` passes only on a violation count of 0 (`drc_count.txt`), `lvs` only on matching netlists. When one of them fails, make stops with a line that names the slack or the count, keeps `finish.json` and the reports, and writes no `signoff.done`, `drc.done` or `lvs.done`. You can still look at the design and run `make gds drc lvs` on it, for example after trying a clock period that is too short. The checks are in `flow/scripts/util/signoff_check.py`.
+- `make test-gates` tests these checks in a few seconds without EDA tools: it runs the `drc`, `lvs` and sign-off targets on made-up results with a stand-in for KLayout.
 
 ## Layout
 
@@ -43,6 +46,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 - A design lists the designs it uses as hard macros in `design.mk`: `MACROS := sb_sram_256x8`.
 - Every stage from `synth` on first runs `make abstract` for each macro (variant `MACRO_VARIANT`, default `base`) in its own make, so knobs on your command line do not reach the macro.
+- `abstract` needs the block to pass sign-off first, so a macro that misses timing stops the build of the design that uses it.
 - Macro placement: `rtl_macro_placer` keeps `MACRO_CHANNEL` (default 80 um, the platform's value) between macros and to the core edge; `MACRO_HALO` (default 10 um) keeps standard cells out around each macro.
 - The macro's power pins are its met4 straps; the platform power grid connects them to met5. The macro routes up to met4 only (`MAX_ROUTING_LAYER` in its `design.mk`).
 - LEC treats the macro as a black box (check the macro itself with `make lec DESIGN=sb_sram_256x8`); GLS simulates its routed netlist (`abstract/<macro>.v`).

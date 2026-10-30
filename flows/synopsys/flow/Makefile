@@ -135,7 +135,7 @@ snps = cd $(BUILD) && rm -f $(1).done && source $(4) && \
     echo "$(1) FAILED -- the tool went on after an Error: read $(BUILD)/$(1).log from the first Error"; exit 1; }
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean test-gates FORCE
 # stages run in order (macros are built before synthesis)
 .NOTPARALLEL:
 FORCE:
@@ -145,6 +145,7 @@ help:
 	@echo "  DESIGN:  $(notdir $(wildcard $(TRACK_DIR)/designs/*))"
 	@echo "  corners: SETUP_CORNERS=$(SETUP_CORNERS) HOLD_CORNERS=$(HOLD_CORNERS) (ss, tt or ff)"
 	@echo "  lec-mutation: LEC must fail on broken netlists"
+	@echo "  test-gates: tests of the DRC and sign-off checks (no EDA tools)"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
 
 info:
@@ -169,7 +170,7 @@ grt:       macros $(BUILD)/grt.done
 route:     macros $(BUILD)/route.done
 finish:    macros $(BUILD)/signoff.done
 gds:       macros $(BUILD)/final.gds
-drc:       macros $(BUILD)/drc_count.txt
+drc:       macros $(BUILD)/drc.done
 lvs:       macros $(BUILD)/lvs.done
 lec:       macros $(BUILD)/lec_synth.done $(BUILD)/lec_route.done
 gls:       macros $(if $(TB_MODULE),$(BUILD)/gls_results.xml)
@@ -187,6 +188,10 @@ $(MACRO_FILES): ;
 
 clean:
 	rm -rf $(BUILD)
+
+# the DRC and sign-off checks on made-up results, with stand-ins for the tools
+test-gates:
+	python3 $(SCRIPTS)/util/test_signoff_check.py
 
 $(BUILD):
 	mkdir -p $@
@@ -315,10 +320,15 @@ $(BUILD)/signoff_%.env: FORCE | $(BUILD)
 $(BUILD)/signoff_%.done: $(BUILD)/signoff_%.env $(BUILD)/final.spef $(SDC_FILE) $(CELL_DBS) $(MACRO_DBS) $(SCRIPTS)/pt/sta.tcl $(RUN_DEPS)
 	@$(call snps,signoff_$*,$(PT_SHELL),$(SCRIPTS)/pt/sta.tcl,signoff_$*.env)
 
-$(BUILD)/signoff.done: $(foreach c,$(STA_CORNERS),$(BUILD)/signoff_$(c).done) $(SCRIPTS)/util/signoff_metrics.py
+# sign-off passes when setup slack at every setup corner and hold slack at every hold corner is >= 0 (signoff_check.py);
+# a failing sign-off keeps its reports and finish.json, and leaves no signoff.done
+$(BUILD)/signoff.done: $(foreach c,$(STA_CORNERS),$(BUILD)/signoff_$(c).done) $(SCRIPTS)/util/signoff_metrics.py $(SCRIPTS)/util/signoff_check.py
+	@rm -f $@
 	python3 $(SCRIPTS)/util/signoff_metrics.py $(BUILD)/finish.json \
 	  --setup $(foreach c,$(SETUP_CORNERS),$(BUILD)/signoff_$(c).json) \
 	  --hold $(foreach c,$(HOLD_CORNERS),$(BUILD)/signoff_$(c).json)
+	@python3 $(SCRIPTS)/util/signoff_check.py slack --setup '$(SETUP_CORNERS)' --hold '$(HOLD_CORNERS)' \
+	  --json '$(BUILD)/signoff_{corner}.json' --setup-key setup_ws_ns --hold-key hold_ws_ns --report '$(BUILD)/signoff_{corner}.rpt'
 	@touch $@
 
 # --- layout: GDS (after finish), KLayout DRC and LVS ---
@@ -345,11 +355,13 @@ else
   $(error GDS_TOOL=$(GDS_TOOL): use icc2 or klayout)
 endif
 
-$(BUILD)/drc_count.txt: $(BUILD)/final.gds $(SCRIPTS)/klayout/drc.sh
-	cd $(BUILD) && KLAYOUT=$(KLAYOUT) $(TIMED) drc bash $(SCRIPTS)/klayout/drc.sh final.gds drc.lyrdb $(DRC_DECK) > drc.log 2>&1 || \
+# drc passes on a violation count of 0 (signoff_check.py); the count is in drc_count.txt, and a failing drc keeps its report
+# and leaves no drc.done
+$(BUILD)/drc.done: $(BUILD)/final.gds $(SCRIPTS)/klayout/drc.sh $(SCRIPTS)/util/signoff_check.py
+	cd $(BUILD) && rm -f drc.done drc_count.txt drc.lyrdb && KLAYOUT=$(KLAYOUT) $(TIMED) drc bash $(SCRIPTS)/klayout/drc.sh final.gds drc.lyrdb $(DRC_DECK) > drc.log 2>&1 || \
 	  { tail -5 $(BUILD)/drc.log; echo "drc FAILED -- read $(BUILD)/drc.log"; exit 1; }
-	@grep -c '<value>' $(BUILD)/drc.lyrdb > $@ || true
-	@echo "KLayout DRC violations: $$(cat $@)"
+	@python3 $(SCRIPTS)/util/signoff_check.py drc $(BUILD)/drc_count.txt --lyrdb $(BUILD)/drc.lyrdb
+	@touch $@
 
 $(BUILD)/lvs.done: $(BUILD)/final.gds $(CDL_FILE) $(MACRO_CDL) $(SCRIPTS)/klayout/lvs.sh $(SCRIPTS)/klayout/v2cdl.py
 	cd $(BUILD) && rm -f lvs.done && KLAYOUT=$(KLAYOUT) $(TIMED) lvs bash $(SCRIPTS)/klayout/lvs.sh \

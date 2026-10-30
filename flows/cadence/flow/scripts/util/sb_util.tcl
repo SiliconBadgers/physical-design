@@ -51,6 +51,15 @@ proc sb_slack {check} {
     return [list $ws $tns]
 }
 
+# worst slack at one analysis view (view_<corner>); check is -late (setup) or -early (hold)
+proc sb_view_slack {check view} {
+    return [sb_value {
+        set s ""
+        foreach_in_collection p [report_timing $check -view $view -max_paths 1 -collection] { set s [sb_prop $p slack] }
+        set s
+    }]
+}
+
 # clock skew {setup hold}: spread of the late and of the early clock arrival over all register clock pins
 proc sb_skew {} {
     set skew {}

@@ -116,7 +116,7 @@ PGV     := $(PGV_DIR)/techonly.cl
 FLOW_DEPS := $(PLATFORM_MK) $(TRACK_DESIGN_DIR)/design.mk
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros clean test-gates FORCE
 # stages run in order (macros are built before synthesis)
 .NOTPARALLEL:
 FORCE:
@@ -126,6 +126,7 @@ help:
 	@echo "  DESIGN:  $(notdir $(wildcard $(TRACK_DIR)/designs/*))"
 	@echo "  info:    settings, tools found on PATH, PDK files present"
 	@echo "  lec-mutation: LEC must fail on broken netlists"
+	@echo "  test-gates: tests of the DRC and sign-off checks (no EDA tools)"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
 
 info:
@@ -152,13 +153,13 @@ place:     macros $(BUILD)/place.json
 cts:       macros $(BUILD)/cts.json
 grt:       macros $(BUILD)/grt.json
 route:     macros $(BUILD)/route.json
-finish:    macros $(BUILD)/finish.json
+finish:    macros $(BUILD)/signoff.done
 gds:       macros $(BUILD)/final.gds
-drc:       macros $(BUILD)/drc_count.txt
+drc:       macros $(BUILD)/drc.done
 lvs:       macros $(BUILD)/lvs.rpt
 lec:       macros $(BUILD)/lec_synth.rpt $(BUILD)/lec_route.rpt
 gls:       macros $(if $(TB_MODULE),$(BUILD)/gls_results.xml)
-abstract:  macros $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
+abstract:  macros $(BUILD)/signoff.done $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
 
 # build each macro's abstract in its own make: no command-line settings (make exports them too) except the tools, PDK, NCPU and -n
 MACRO_MAKE_VARS := SB_PDK NCPU GENUS INNOVUS TEMPUS VOLTUS GENUS_FLAGS INNOVUS_FLAGS TEMPUS_FLAGS VOLTUS_FLAGS
@@ -171,6 +172,10 @@ $(MACRO_FILES): ;
 
 clean:
 	rm -rf $(BUILD)
+
+# the DRC and sign-off checks on made-up results, with stand-ins for the tools
+test-gates:
+	python3 $(SCRIPTS)/util/test_signoff_check.py
 
 $(BUILD):
 	mkdir -p $@
@@ -289,6 +294,15 @@ $(BUILD)/finish.json: $(BUILD)/route.json $(PNR_DEPS) $(SCRIPTS)/pnr/finish.tcl 
 	  SPEF_PREFIX=$(BUILD)/final PROP_SDC=$(SCRIPTS)/tempus/propagated.sdc $(call tempus,finish_sta))
 	$(if $(filter 1,$(SKIP_IR)),echo "IR drop skipped (SKIP_IR=1)",$(call cadence,finish_ir,pnr.env,$(call voltus,finish_ir,ir)))
 
+# sign-off passes when the Tempus setup slack at every setup corner and hold slack at every hold corner is >= 0
+# (signoff_check.py); a failing sign-off keeps finish.json and its reports, and leaves no signoff.done
+$(BUILD)/signoff.done: $(BUILD)/finish.json $(SCRIPTS)/util/signoff_check.py
+	rm -f $@
+	@python3 $(SCRIPTS)/util/signoff_check.py slack --setup '$(SETUP_CORNERS)' --hold '$(HOLD_CORNERS)' --json $(BUILD)/finish.json \
+	  --setup-key 'finish__timing__setup__ws__corner:{corner}' --hold-key 'finish__timing__hold__ws__corner:{corner}' \
+	  --report $(BUILD)/finish_sta.rpt
+	@touch $@
+
 $(PGV): | $(BUILD)/pnr.env
 	mkdir -p $(PGV_DIR)/logs
 	cd $(PGV_DIR) && source $(BUILD)/pnr.env && \
@@ -311,13 +325,18 @@ $(BUILD)/final.gds: $(BUILD)/finish.json $(MACRO_GDS) $(BUILD)/pnr.env $(SCRIPTS
 	$(call cadence,gds,pnr.env,$(call innovus,gds))
 
 # --- signoff checks (Pegasus) ---
+# drc passes on a violation count of 0 (signoff_check.py); the count is in drc_count.txt, and a failing drc keeps its
+# results and leaves no drc.done
 PEGASUS_ENV = env PEGASUS='$(PEGASUS)' NCPU='$(NCPU)'
-$(BUILD)/drc_count.txt: $(BUILD)/final.gds $(SCRIPTS)/pegasus/drc.sh
+$(BUILD)/drc.done: $(BUILD)/final.gds $(SCRIPTS)/pegasus/drc.sh $(SCRIPTS)/util/signoff_check.py
+	rm -f $@ $(BUILD)/drc_count.txt
 	cd $(BUILD) && $(TIMED) drc $(PEGASUS_ENV) DRC_DENSITY='$(DRC_DENSITY)' $(SCRIPTS)/pegasus/drc.sh \
-	  $(DRC_DECK) final.gds $(TOP) drc $@ > drc.log 2>&1 || { tail -5 drc.log; echo "DRC FAILED -- read $(BUILD)/drc.log"; exit 1; }
-	@echo "Pegasus DRC violations: $$(cat $@) (results in $(BUILD)/drc/)"
+	  $(DRC_DECK) final.gds $(TOP) drc $(BUILD)/drc_count.txt > drc.log 2>&1 || { tail -5 drc.log; echo "DRC FAILED -- read $(BUILD)/drc.log"; exit 1; }
+	@python3 $(SCRIPTS)/util/signoff_check.py drc $(BUILD)/drc_count.txt --report $(BUILD)/drc/$(TOP).drc.sum
+	@touch $@
 
 $(BUILD)/lvs.rpt: $(BUILD)/final.gds $(MACRO_LVS) $(SCRIPTS)/pegasus/lvs.sh
+	rm -f $@
 	cd $(BUILD) && $(TIMED) lvs $(PEGASUS_ENV) $(SCRIPTS)/pegasus/lvs.sh $(LVS_DECK) final.gds $(TOP) lvs \
 	  final_lvs.v $(CELL_CDL) $(MACRO_LVS) > lvs.log 2>&1 || { tail -5 lvs.log; echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
 	@r=$(BUILD)/lvs/$(TOP).lvs.rpt; grep -qE '\bMATCH\b' $$r && ! grep -qE 'MISMATCH' $$r && cp $$r $@ && \

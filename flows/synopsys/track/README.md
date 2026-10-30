@@ -40,7 +40,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 | `sta` | PrimeTime, at each setup and hold corner | `sta_<corner>.rpt`, `.json` |
 | `floorplan` `place` `cts` `grt` `route` | IC Compiler II | checkpoint `icc2/<stage>/<top>.nlib`, `<stage>.log`, `.rpt`, `.json` (metrics) |
 | `finish` | IC Compiler II, StarRC, PrimeTime | `final.v`, `final_logic.v`, `final_lvs.v`, `final.def`, `final.spef`, `signoff_<corner>.rpt`, `finish.json` |
-| `gds`, `drc`, `lvs` | IC Compiler II, KLayout | `final.gds`, `drc.lyrdb`, `lvs.lvsdb` |
+| `gds`, `drc`, `lvs` | IC Compiler II, KLayout | `final.gds`, `drc_count.txt`, `drc.lyrdb`, `lvs.lvsdb` |
 | `lec` | Formality | `lec_synth.log` (RTL vs `netlist.v`, with `synth.svf`), `lec_route.log` (`netlist.v` vs `final_logic.v`), `lec_<step>_{unmatched,blackboxes,failing}.rpt` |
 | `gls` | VCS and cocotb | `gls_results.xml`: the RTL testbench on `final_logic.v` with the cell models |
 | `abstract` | IC Compiler II, PrimeTime, Library Compiler, KLayout | `abstract/<top>.{lef,lib,gds,cdl,v}`, `<top>_<corner>.db`, `<top>.ndm`: the design as a macro |
@@ -49,6 +49,8 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 - Sign-off corners: `tt` for setup and hold by default (`SETUP_CORNERS=tt`, `HOLD_CORNERS=tt`), like track A, so the metrics compare. IC Compiler II has a scenario for each sign-off corner and fixes setup and hold there; `PNR_DRV_CORNERS` adds scenarios where it fixes only max transition and capacitance.
 - `finish.json` gets its timing from PrimeTime with the StarRC parasitics (worst over the corners); area and utilization come from IC Compiler II. A value a script could not read is `null`.
+- `finish` passes only when the PrimeTime setup slack at each setup corner and the hold slack at each hold corner (`signoff_<corner>.json`) are numbers ≥ 0; a corner's other check is only reported (hold at a setup-only corner, setup at a hold-only one). `drc` passes only on a violation count of 0 (`drc_count.txt`), `lvs` only on matching netlists. When one of them fails, make stops with a line that names the corner and the slack, or the count, keeps `finish.json` and the reports, and writes no `signoff.done` or `drc.done`. You can still look at the design and run `make gds drc lvs` on it, for example after trying a clock period that is too short. The checks are in `flow/scripts/util/signoff_check.py`.
+- `make test-gates` tests these checks in a few seconds without EDA tools: it runs the `drc` and sign-off targets on made-up results with a stand-in for KLayout.
 - `final_logic.v` is `final.v` (the PrimeTime netlist) without antenna diodes: the logic netlist for LEC and GLS. LVS uses `final_lvs.v`.
 - `lec_route` uses no SVF: IC Compiler II keeps the flip-flop, port and macro instance names of `netlist.v`, and Formality pairs those by name; the buffers, resized cells, swapped pins and tie cells from place and route sit inside the logic cones between them.
 - GLS uses the SkyWater models with `FUNCTIONAL` and `UNIT_DELAY=#1` (a 1 ns flip-flop delay, no other cell delays).
@@ -86,6 +88,7 @@ make <stage> DESIGN=<design> [VARIANT=<name>] [<VARIABLE>=<value> ...]
 
 - A design lists the designs it uses as hard macros in `design.mk`: `MACROS := sb_sram_256x8`.
 - Every stage first runs `make abstract` for each macro (variant `MACRO_VARIANT`) in its own make, so knobs on your command line do not reach the macro.
+- `abstract` needs the block to pass sign-off first, so a macro that misses timing stops the build of the design that uses it.
 - `abstract`: LEF from the IC Compiler II frame (`create_frame -block_all used_layers`), a PrimeTime `extract_model` per corner with the StarRC parasitics (`<top>.lib` is tt), compiled to `.db`, and an IC Compiler II library (`.ndm`) from both. Design Compiler and PrimeTime read the `.db`, IC Compiler II the `.ndm`.
 - Placement (`macro_place.tcl`): rows from the top-left of the core, `MACRO_CHANNEL` apart and from the core edge, on the met2/met4 and met3/met5 track grid; a hard keep-out margin of `MACRO_HALO`.
 - The macro routes up to met4 (`MAX_ROUTING_LAYER` in its `design.mk`); its met4 straps are its power pins. The parent's met1 rails and met4 straps stop at the macro, its met5 straps cross it and connect to those pins.

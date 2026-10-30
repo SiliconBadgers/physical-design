@@ -43,6 +43,9 @@ set pairs [list \
 if {$spef ne ""} {
     lassign [sb_skew] skew_setup skew_hold
     lappend pairs ${stage}__clock__skew__setup $skew_setup ${stage}__clock__skew__hold $skew_hold
+    # sign-off: setup slack at each setup corner and hold slack at each hold corner (make finish checks them)
+    foreach c $::env(SETUP_CORNERS) { lappend pairs ${stage}__timing__setup__ws__corner:$c [sb_view_slack -late view_$c] }
+    foreach c $::env(HOLD_CORNERS)  { lappend pairs ${stage}__timing__hold__ws__corner:$c [sb_view_slack -early view_$c] }
 }
 sb_write_json $out/$stage.json $pairs
 puts "SB: $name setup_ws=$setup_ws setup_tns=$setup_tns hold_ws=$hold_ws hold_tns=$hold_tns -> $rpt"

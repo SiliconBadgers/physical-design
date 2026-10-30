@@ -17,6 +17,7 @@ read -ra pegasus <<< "${PEGASUS:-pegasus}"
 
 mkdir -p "$run"
 cd "$run"
+rm -f "$top.drc.sum" "$top.drc_errors.ascii"   # an earlier run's results must not count for this one
 
 # density rules need metal fill, which this flow does not add: off unless DRC_DENSITY=1
 if [ "${DRC_DENSITY:-0}" != 1 ]; then

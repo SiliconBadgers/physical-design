@@ -82,6 +82,7 @@ Flow settings: `HAL_ARGS` (`-f flow/scripts/lint/hal_rules.f`: the HAL style rul
 
 - A design lists the designs it uses as hard macros in `design.mk`: `MACROS := sb_sram_256x8`.
 - Every stage from `synth` on first runs `make abstract` for each macro (variant `MACRO_VARIANT`, default `base`) in its own make, so knobs on your command line do not reach the macro.
+- `abstract` needs the block to pass sign-off first, so a macro that misses timing stops the build of the design that uses it.
 - Placement: rows of macros from the top of the core, `MACRO_CHANNEL` (default 80 um) apart and from the core edge; `MACRO_HALO` (default 10 um) keeps standard cells out around each macro. With macros, the core is sized from the area of every instance and grown until they fit.
 - The macro's power pins are its met4 straps (its `pdn.tcl`); the met5 straps of the top grid cross the macro and connect to them. The macro routes up to met4 only (`MACRO_TOP_LAYER` in the platform file).
 - The tile reads the macro LEF and timing models in Genus, Innovus and Tempus, merges its GDS, and LVS reads its LVS netlist (`abstract/<macro>_lvs.v`).
@@ -98,6 +99,8 @@ Flow settings: `HAL_ARGS` (`-f flow/scripts/lint/hal_rules.f`: the HAL style rul
 
 - Same metric names as track A, but another library (`sky130_scl_9T`, not `sky130_fd_sc_hd`), so the numbers compare flows, not like for like.
 - Timing is signed off at `tt` by default, like track A, so the metrics compare. For full signoff run a variant with `SETUP_CORNERS=ss HOLD_CORNERS="ff tt"` (expect negative setup at `ss` until the clock is recalibrated).
+- `finish` passes only when the Tempus setup slack at each setup corner and the hold slack at each hold corner (`finish__timing__setup__ws__corner:<corner>` and `finish__timing__hold__ws__corner:<corner>` in `finish.json`) are numbers ≥ 0. `drc` passes only on a violation count of 0 (`drc_count.txt`), `lvs` only on `MATCH`. When one of them fails, make stops with a line that names the corner and the slack, or the count, keeps `finish.json` and the reports, and writes no `signoff.done` or `drc.done`. You can still look at the design and run `make gds drc lvs` on it, for example after trying a clock period that is too short. The checks are in `flow/scripts/util/signoff_check.py`.
+- `make test-gates` tests these checks in a few seconds without EDA tools: it runs the `drc`, `lvs` and sign-off targets on made-up results with a stand-in for Pegasus.
 - `grt` is Innovus's early global route (congestion and timing estimate); `route_design` in `route` routes again in full.
 - `cts` runs `create_clock_tree_spec` and `ccopt_design` on Innovus releases before 25, and `clock_opt_design` on 25 and newer (on 21.x `clock_opt_design` is a beta feature that builds no clock tree and reports no error). The `SB: cts command` line in `cts.log` names the one used.
 - A metric a script cannot read is `null`; the report next to it has the number.

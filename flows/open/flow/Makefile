@@ -112,7 +112,7 @@ FLOW_DEPS := $(PLATFORM_MK) $(TRACK_DESIGN_DIR)/design.mk
 OR_RUN    := $(OPENROAD) -no_init -no_splash -exit
 
 # --- targets ---
-.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros compare clean FORCE
+.PHONY: help info all lint sim synth sta floorplan place cts grt route finish gds drc lvs lec gls lec-mutation abstract macros compare clean test-gates FORCE
 # stages run in order (macros are built before synthesis)
 .NOTPARALLEL:
 FORCE:
@@ -122,6 +122,7 @@ help:
 	@echo "  DESIGN:  $(notdir $(wildcard $(TRACK_DIR)/designs/*))"
 	@echo "  compare: run ORFS on the same netlist and SDC and print both flows' numbers per stage"
 	@echo "  lec-mutation: LEC must fail on broken netlists"
+	@echo "  test-gates: tests of the DRC and sign-off checks (no EDA tools)"
 	@echo "outputs: build/<DESIGN>/<VARIANT>/"
 
 info:
@@ -143,13 +144,13 @@ place:     macros $(BUILD)/place.odb
 cts:       macros $(BUILD)/cts.odb
 grt:       macros $(BUILD)/grt.odb
 route:     macros $(BUILD)/route.odb
-finish:    macros $(BUILD)/final.odb
+finish:    macros $(BUILD)/signoff.done
 gds:       macros $(BUILD)/final.gds
-drc:       macros $(BUILD)/drc_count.txt
-lvs:       macros $(BUILD)/lvs.lvsdb
+drc:       macros $(BUILD)/drc.done
+lvs:       macros $(BUILD)/lvs.done
 lec:       macros $(BUILD)/lec_synth.log $(BUILD)/lec_route.log
 gls:       macros $(if $(TB_MODULE),$(BUILD)/gls_results.xml)
-abstract:  $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
+abstract:  $(BUILD)/signoff.done $(BUILD)/abstract/$(TOP).lef $(BUILD)/abstract/$(TOP).gds
 
 # build each macro's abstract in its own make: only the PDK and tool paths pass on, not other command-line settings
 MACRO_MAKE_VARS := SB_PDK YOSYS OPENROAD KLAYOUT
@@ -162,6 +163,10 @@ $(MACRO_FILES): ;
 
 clean:
 	rm -rf $(BUILD)
+
+# the DRC and sign-off checks on made-up results, with stand-ins for the tools
+test-gates:
+	python3 $(SCRIPTS)/util/test_signoff_check.py
 
 $(BUILD):
 	mkdir -p $@
@@ -296,6 +301,14 @@ $(BUILD)/route.odb: $(BUILD)/grt.odb $(PNR_DEPS) $(SCRIPTS)/pnr/route.tcl
 $(BUILD)/final.odb: $(BUILD)/route.odb $(PNR_DEPS) $(SCRIPTS)/pnr/finish.tcl
 	$(call pnr_stage,finish)
 
+# sign-off (tt, the only corner) passes when setup and hold slack in finish.json are >= 0 (signoff_check.py); a failing
+# sign-off keeps its outputs and reports, and leaves no signoff.done
+$(BUILD)/signoff.done: $(BUILD)/final.odb $(SCRIPTS)/util/signoff_check.py
+	@rm -f $@
+	@python3 $(SCRIPTS)/util/signoff_check.py slack --setup tt --hold tt --json $(BUILD)/finish.json \
+	  --setup-key finish__timing__setup__ws --hold-key finish__timing__hold__ws --report $(BUILD)/finish.rpt
+	@touch $@
+
 # abstract of this design for use as a macro: LEF, timing model (tt), LVS and gate netlists; GDS copied on its own
 $(BUILD)/abstract/$(TOP).lef: $(BUILD)/final.odb $(SCRIPTS)/pnr/abstract.tcl $(SCRIPTS)/pnr/abstract_antenna.py
 	mkdir -p $(BUILD)/abstract
@@ -307,23 +320,28 @@ $(BUILD)/abstract/$(TOP).gds: $(BUILD)/final.gds
 	mkdir -p $(@D)
 	cp $< $@
 
-# --- layout: GDS merge and KLayout DRC ---
+# --- layout: GDS merge, KLayout DRC and LVS ---
 $(BUILD)/final.gds: $(BUILD)/final.odb $(MACRO_GDS) $(SCRIPTS)/pnr/gds.py
 	cd $(BUILD) && $(TIMED) gds $(KLAYOUT) -zz -rd in_def=final.def -rd lefs="$(TECH_LEF) $(CELL_LEF) $(MACRO_LEFS)" \
 	  -rd gds_in="$(CELL_GDS) $(MACRO_GDS)" -rd lyt=$(KLAYOUT_LYT) -rd top=$(TOP) -rd out=final.gds \
 	  -r $(SCRIPTS)/pnr/gds.py > gds.log 2>&1 || { tail -5 gds.log; exit 1; }
 
-$(BUILD)/drc_count.txt: $(BUILD)/final.gds
+# drc passes on a violation count of 0 (signoff_check.py), lvs on matching netlists; the DRC count is in drc_count.txt.
+# A failing check keeps its report (drc.lyrdb, lvs.lvsdb) and leaves no drc.done or lvs.done
+$(BUILD)/drc.done: $(BUILD)/final.gds $(SCRIPTS)/util/signoff_check.py
+	@rm -f $@ $(BUILD)/drc_count.txt $(BUILD)/drc.lyrdb
 	cd $(BUILD) && $(TIMED) drc $(KLAYOUT) -b -rd in_gds=final.gds -rd report_file=$(BUILD)/drc.lyrdb \
-	  -r $(DRC_DECK) > drc.log 2>&1
-	@grep -c '<value>' $(BUILD)/drc.lyrdb > $@ || true
-	@echo "KLayout DRC violations: $$(cat $@)"
+	  -r $(DRC_DECK) > drc.log 2>&1 || { tail -5 drc.log; echo "drc FAILED -- read $(BUILD)/drc.log"; exit 1; }
+	@python3 $(SCRIPTS)/util/signoff_check.py drc $(BUILD)/drc_count.txt --lyrdb $(BUILD)/drc.lyrdb
+	@touch $@
 
-$(BUILD)/lvs.lvsdb: $(BUILD)/final.gds $(CDL_FILE) $(MACRO_CDL)
+$(BUILD)/lvs.done: $(BUILD)/final.gds $(CDL_FILE) $(MACRO_CDL)
+	@rm -f $@
 	cat $(BUILD)/final.cdl $(CDL_FILE) $(MACRO_CDL) > $(BUILD)/final_concat.cdl
 	cd $(BUILD) && $(TIMED) lvs $(KLAYOUT) -b -rd in_gds=final.gds -rd cdl_file=$(BUILD)/final_concat.cdl \
 	  -rd top_cell=$(TOP) -rd report_file=$(BUILD)/lvs.lvsdb -r $(LVS_DECK) > lvs.log 2>&1 || { tail -5 lvs.log; exit 1; }
 	@grep -q 'Netlists match' $(BUILD)/lvs.log && echo "LVS: netlists match" || { echo "LVS FAILED -- read $(BUILD)/lvs.log"; exit 1; }
+	@touch $@
 
 # --- lec (eqy): RTL vs synthesized netlist, then synthesized vs routed netlist; macros are black boxes ---
 $(BUILD)/lec_synth.eqy: $(SCRIPTS)/lec/eqy.template $(SCRIPTS)/lec/make_eqy.py $(BUILD)/netlist.v $(SYNTH_RTL) $(FLOW_DEPS)
