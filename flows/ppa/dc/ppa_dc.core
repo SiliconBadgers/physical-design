@@ -1,0 +1,19 @@
+CAPI=2:
+# File:        ppa_dc.core
+# Author:      Isaac Hagedorn
+# Date:        2026-11-17
+# Description: The Design Compiler script of the PPA flow. A unit's synth target depends on this core, and FuseSoC
+#              copies the script into the run folder.
+
+name: ::ppa_dc:0.1.0
+description: Design Compiler synthesis script of the PPA flow.
+
+filesets:
+  synth:
+    files:
+      - synth.tcl: {copyto: synth.tcl}
+    file_type: user
+
+targets:
+  default:
+    filesets: [synth]

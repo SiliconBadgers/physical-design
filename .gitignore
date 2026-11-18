@@ -22,3 +22,4 @@ __pycache__/
 /flows/open/build/
 /flows/cadence/build/
 /flows/synopsys/build/
+/flows/ppa/build/

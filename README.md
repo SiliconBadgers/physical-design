@@ -22,6 +22,7 @@ The immediate delivery is one reproducible Synopsys synthesis baseline for the c
 | [flows/open/](flows/open/track/README.md) | flow-kit's Track A reference flow (RTL to GDS) with open-source tools: Yosys, OpenROAD, KLayout. |
 | [flows/cadence/](flows/cadence/track/README.md) | flow-kit's Track B1 reference flow (RTL to GDS) with Cadence tools. |
 | [flows/designs/](flows/README.md#designs) | RTL and tests of the flow-kit designs (gcd, sb_sram_256x8, tile), shared by the three tracks. |
+| [flows/ppa/](flows/ppa/README.md) | Synthesis-only PPA flow: Design Compiler at the sky130hd library through FuseSoC (`make synth-unit UNIT=<unit>`, `make synth-units`), with one table of power, timing and area per unit. |
 | [rtl/stubs/](rtl/stubs/README.md) | Clearly labeled temporary synthesizable stubs, separated from real component RTL. Their ports are proposals; coordinate them with RTL owners. |
 | [rtl/wrappers/](rtl/wrappers/README.md) | Chip assembly and unit wrappers that consume revision-pinned component sources. Do not copy authoritative component implementations here. |
 | [constraints/](constraints/README.md) | Chip and per-unit baseline clocks, I/O assumptions and justified exceptions. Identify unresolved constraints instead of quietly treating them as met. |

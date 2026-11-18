@@ -19,6 +19,8 @@ make all DESIGN=gcd
 
 Setup, commands and status for a track: `track/README.md` in its folder. [tracks.md](tracks.md) helps you pick one.
 
+[`flows/ppa`](ppa/README.md) is a synthesis-only flow next to the tracks: Design Compiler at the sky130hd library through FuseSoC, with one table of power, timing and area per unit.
+
 ## PDK
 
 From the repo root (the folder that holds `flows/`), clone the [SiliconBadgers sky130 PDK](https://github.com/ihagedo/silicon-badgers-sky130-pdk); git ignores the clone:
