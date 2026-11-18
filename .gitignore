@@ -16,3 +16,9 @@ __pycache__/
 /DVEfiles/
 *.ddc
 *.svf
+
+# PD flow: the PDK clone in the repo root and each track's build output
+/silicon-badgers-sky130-pdk/
+/flows/open/build/
+/flows/cadence/build/
+/flows/synopsys/build/

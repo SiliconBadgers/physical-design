@@ -1,0 +1,27 @@
+* File:        starrc.cmd.in
+* Author:      Isaac Hagedorn
+* Date:        2026-10-09
+* Description: StarRC command file template (LEF/DEF in, SPEF out). run_starrc.sh fills in the @NAME@ fields.
+
+* Design: the routed DEF from IC Compiler II and the LEF of the cells
+BLOCK: @TOP@
+TOP_DEF_FILE: @DEF@
+LEF_FILE: @LEFS@
+
+* Process: RC tables from the ITF, and the LEF-to-ITF layer names
+TCAD_GRD_FILE: @NXTGRD@
+MAPPING_FILE: @MAP@
+
+* Extract R and C of every signal net; cells are black boxes
+EXTRACTION: RC
+SKIP_CELLS: *
+* Coupling capacitance goes to ground (no crosstalk analysis)
+COUPLE_TO_GROUND: YES
+REDUCTION: NO_EXTRA_LOOPS
+
+* Output
+NETLIST_FORMAT: SPEF
+NETLIST_FILE: @SPEF@
+SUMMARY_FILE: @SUMMARY@
+STAR_DIRECTORY: @STAR_DIR@
+NUM_CORES: @CORES@

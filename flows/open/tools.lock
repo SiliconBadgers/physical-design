@@ -1,0 +1,21 @@
+# File:        tools.lock
+# Author:      Isaac Hagedorn
+# Date:        2026-10-08
+# Description: Tool and PDK versions this flow is verified with. The place-and-route tools match the ORFS pin, so `make compare` is like for like.
+orfs:
+  repo: https://github.com/The-OpenROAD-Project/OpenROAD-flow-scripts
+  commit: babdf6e26cac84a79f7814a5c61c53ee84f43994   # only for make compare
+openroad:
+  commit: 91e5f5ff2f198fd130e8915c8ad4408b56987fa4   # ORFS submodule tools/OpenROAD
+yosys:
+  commit: a5af9d690a43744bf6b2cc3dea2717c16b54621c   # ORFS submodule tools/yosys
+klayout:
+  version: 0.30.12
+verilator:
+  version: v5.052
+iverilog:
+  commit: d1982fc7d823f1786f4788a88551f0664c16d7e7
+cocotb:
+  version: 2.1.0
+pdk:
+  repo: silicon-badgers-sky130-pdk   # sky130hd from ORFS babdf6e2

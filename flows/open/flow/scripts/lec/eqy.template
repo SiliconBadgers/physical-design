@@ -1,0 +1,84 @@
+# File:        eqy.template
+# Author:      Isaac Hagedorn
+# Date:        2026-10-09
+# Description: eqy logical equivalence check of the RTL (gold) against the synthesized netlist (gate). make_eqy.py fills in the placeholders and writes lec.eqy.
+
+[options]
+# split multi-bit wires into bits, as synthesis did
+splitnets on
+
+[gold]
+# RTL, read as synthesis read it
+@GOLD_READ@
+prep -top @TOP@
+flatten
+memory_map
+opt_clean
+# remove constant flip-flops and merge duplicates, as synthesis did
+opt -keepdc
+opt_dff -sat
+opt -keepdc
+opt_dff -sat
+opt -keepdc
+opt_merge
+# build arithmetic as synthesis did (alumacc, then techmap with the same adders)
+alumacc
+@TECHMAP@
+opt -fast -keepdc
+
+[gate]
+read_verilog @NETLIST@
+# kept modules stay modules (marked before the library cells are read)
+setattr -mod -set keep_hierarchy 1 *
+# library cells as logic (read_liberty without -lib)
+@GATE_LIBS@
+prep -top @TOP@
+flatten
+# hide cell pin names left by flatten
+rename -hide w:_*_.*
+# keep the output-port buffers as real buffers
+insbuf o:*
+setattr -set keep 1 t:$_BUF_
+# merge the Q / QN copies of each flip-flop (flip-flops only)
+opt_merge t:$_*DFF*
+opt_clean
+
+[script]
+# runs on both designs
+# drop unused library cells
+hierarchy -purge_lib -top @TOP@
+# one wire per bit
+splitnets
+# start every flip-flop in its reset state (set-type 1, all others 0)
+setundef -one -init t:$_DFF_??1_ t:$_DFFE_??1?_ t:$_SDFF_??1_ t:$_SDFFE_??1?_ t:$_SDFFCE_??1?_ %u %u %u %u
+setundef -zero -init t:$*dff* t:$_*DFF* %u
+
+[gold]
+# keep names only on key points: register outputs, black-box and kept-module pins, ports
+select -set keypoints t:$*dff* t:$_*DFF* %u %co %a =A:blackbox =A:keep_hierarchy %u %C %x w:* %i %a %u x:* %u
+rename -hide w:* @keypoints %d
+# hide RTL-only names on black-box and kept-module pins (from make_eqy.py)
+@GOLD_HIDE@
+
+[collect @TOP@]
+# one piece per multi-bit register (from make_eqy.py)
+@GROUPS@
+# solo + bind every output port (from make_eqy.py)
+@BINDS@
+
+# kept modules: one piece per output port (from make_eqy.py)
+@KEPT_MODULES@
+
+[strategy sat]
+# tried first; unproven pieces go to abc after the timeout (s)
+use sat
+depth 5
+timeout 60
+
+[strategy abc]
+# ABC (scorr, fraig, pdr) through SymbiYosys, for arithmetic
+use sby
+engine abc scorr; fraig; pdr
+# no counterexample trace from this engine
+option aigsmt none
+timeout 1800

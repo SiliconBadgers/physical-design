@@ -1,0 +1,19 @@
+// File:        lint_waivers.vlt
+// Author:      Isaac Hagedorn
+// Date:        2026-10-08
+// Description: Verilator lint waivers for the ORFS gcd unit (PyMTL-generated, unmodified).
+`verilator_config
+
+// PyMTL `/*verilator -xinit: zeros*/` comments.
+lint_off -rule BADVLTPRAGMA -file "*/gcd.v"
+
+// PyMTL: all modules in one file; unused clk/reset/nports on generated registers.
+lint_off -rule DECLFILENAME -file "*/gcd.v"
+lint_off -rule UNUSEDSIGNAL -file "*/gcd.v" -match "*'clk'*"
+lint_off -rule UNUSEDSIGNAL -file "*/gcd.v" -match "*'reset'*"
+lint_off -rule UNUSEDPARAM  -file "*/gcd.v" -match "*'nports'*"
+
+// do_swap/do_sub: temporaries assigned in one state only; latch output unused.
+lint_off -rule LATCH        -file "*/gcd.v" -match "*gcd.ctrl.do_swap*"
+lint_off -rule LATCH        -file "*/gcd.v" -match "*gcd.ctrl.do_sub*"
+lint_off -rule UNUSEDSIGNAL -file "*/gcd.v" -match "*'do_sub'*"

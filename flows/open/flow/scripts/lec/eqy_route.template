@@ -1,0 +1,43 @@
+# File:        eqy_route.template
+# Author:      Isaac Hagedorn
+# Date:        2026-10-09
+# Description: eqy logical equivalence check of the synthesized netlist (gold) against the routed netlist (gate). Make fills in the placeholders and writes lec_route.eqy.
+
+[options]
+splitnets on
+
+[gold]
+read_verilog @GOLD@
+@LIBS@
+prep -top @TOP@
+flatten
+# match points: ports, flip-flop states (<instance>.IQ) and the synthesis net names (_123_), which place and route keeps;
+# every other name (cell pins, clock tree, new buffers) is hidden
+rename -hide w:* w:*.IQ w:_*_ x:* %u %u %d
+
+[gate]
+read_verilog @GATE@
+@LIBS@
+prep -top @TOP@
+flatten
+rename -hide w:* w:*.IQ w:_*_ x:* %u %u %d
+
+[script]
+# drop unused library cells
+hierarchy -purge_lib -top @TOP@
+splitnets
+# start every flip-flop in its reset state (set-type 1, all others 0)
+setundef -one -init t:$_DFF_??1_ t:$_DFFE_??1?_ t:$_SDFF_??1_ t:$_SDFFE_??1?_ t:$_SDFFCE_??1?_ %u %u %u %u
+setundef -zero -init t:$*dff* t:$_*DFF* %u
+
+[strategy sat]
+use sat
+depth 5
+timeout 60
+
+[strategy abc]
+# ABC (scorr, fraig, pdr) through SymbiYosys, for arithmetic
+use sby
+engine abc scorr; fraig; pdr
+option aigsmt none
+timeout 1800

@@ -1,0 +1,34 @@
+# File:        .gitignore
+# Author:      Isaac Hagedorn
+# Date:        2026-10-09
+# Description: Files git should not track: run outputs, tool scratch files and logs.
+
+# Flow outputs (design databases such as *.odb live in results/)
+build/
+logs/
+objects/
+results/
+# Python
+__pycache__/
+*.pyc
+# Simulation
+sim_build/
+*.vcd
+*.fst
+*.shm/
+xcelium.d/
+INCA_libs/
+simv*
+csrc/
+*.daidir/
+ucli.key
+# Commercial tool scratch files
+alib-52/
+WORK/
+*.svf
+.cadence/
+fv/
+# Tool logs and command histories
+*.log
+*.cmd
+*.cmd~

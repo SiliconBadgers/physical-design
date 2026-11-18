@@ -1,0 +1,16 @@
+# File:        sky130_scl_9T_qrc.map
+# Author:      Isaac Hagedorn
+# Date:        2026-10-09
+# Description: Maps the technology LEF layer names to the layer names in tech/qrcTechFile (CCL format: <LEF layer> <Quantus layer>).
+#              Used by Innovus extraction (extract_rc_lef_tech_file_map); Voltus builds its own map for the PGV.
+extraction_setup \
+  -technology_layer_map \
+  met1 metal1 \
+  via  via1 \
+  met2 metal2 \
+  via2 via2 \
+  met3 metal3 \
+  via3 via3 \
+  met4 metal4 \
+  via4 via4 \
+  met5 metal5
