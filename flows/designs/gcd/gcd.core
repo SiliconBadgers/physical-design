@@ -1,0 +1,38 @@
+CAPI=2:
+# File:        gcd.core
+# Author:      Isaac Hagedorn
+# Date:        2026-11-17
+# Description: FuseSoC core for gcd: its RTL and the synthesis target of the PPA flow (flows/ppa).
+
+name: ::gcd:0.1.0
+description: 16-bit Euclid GCD, the smallest flow-kit design.
+
+filesets:
+  rtl:
+    files:
+      - rtl/gcd.v
+    file_type: verilogSource
+
+  constraints:
+    files:
+      - constraints/synth.sdc: {copyto: synth.sdc}
+    file_type: user
+
+  synth:
+    depend:
+      - ::ppa_dc:0.1.0
+
+targets:
+  default: &default
+    filesets: [rtl]
+    toplevel: gcd
+
+  synth:
+    <<: *default
+    filesets_append: [constraints, synth]
+    default_tool: design_compiler
+    tools:
+      design_compiler:
+        script_dir: .
+        dc_script: synth.tcl
+        report_dir: reports
